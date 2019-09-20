@@ -52,9 +52,10 @@ class TestV2vArgs(unittest.TestCase):
         STATE.machine_readable_log = '/some/path'
         data = self.VDDK_RHV.copy()
         expected = [
-            '-v', '-x', 'My Virtual',
+            '-v', '-x',
             '--root', 'first',
             '--machine-readable=file:/some/path',
+            'My Virtual',
             '-i', 'libvirt',
             '-ic', 'esx://root@1.2.3.4?',
             '-it', 'vddk',

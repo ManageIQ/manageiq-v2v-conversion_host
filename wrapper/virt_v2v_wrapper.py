@@ -30,11 +30,12 @@ import time
 
 from .state import STATE, Disk
 from .common import error, hard_error, log_command_safe
-from .common import RUN_DIR, LOG_DIR
+from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR
 from .hosts import detect_host
 from .log_parser import log_parser
 from .checks import CHECKS
 from .runners import SubprocessRunner
+from .pre_copy import PreCopy
 
 # Wrapper version
 VERSION = "23"
@@ -50,24 +51,33 @@ LOG_LEVEL = logging.DEBUG
 def prepare_command(data, v2v_caps, agent_sock=None):
     v2v_args = [
         '-v', '-x',
-        data['vm_name'],
         '--root', 'first',
         '--machine-readable=file:{}'.format(STATE.machine_readable_log),
     ]
 
-    if data['transport_method'] == 'vddk':
+    if STATE.pre_copy:
         v2v_args.extend([
-            '-i', 'libvirt',
-            '-ic', data['vmware_uri'],
-            '-it', 'vddk',
-            '-io', 'vddk-libdir=%s' % '/opt/vmware-vix-disklib-distrib',
-            '-io', 'vddk-thumbprint=%s' % data['vmware_fingerprint'],
-            '--password-file', data['vmware_password_file'],
+            STATE.pre_copy.get_xml(),
+            '-i', 'libvirtxml',
+            # TODO: Remove later when v2v has support for direct commit
+            '--debug-overlays',
+            '--no-copy',
+        ])
+    else:
+        v2v_args.append(data['vm_name'])
+        if data['transport_method'] == 'vddk':
+            v2v_args.extend([
+                '-i', 'libvirt',
+                '-ic', data['vmware_uri'],
+                '-it', 'vddk',
+                '-io', 'vddk-libdir=%s' % VDDK_LIBDIR,
+                '-io', 'vddk-thumbprint=%s' % data['vmware_fingerprint'],
+                '--password-file', data['vmware_password_file'],
             ])
-    elif data['transport_method'] == 'ssh':
-        v2v_args.extend([
-            '-i', 'vmx',
-            '-it', 'ssh',
+        elif data['transport_method'] == 'ssh':
+            v2v_args.extend([
+                '-i', 'vmx',
+                '-it', 'ssh',
             ])
 
     if 'network_mappings' in data:
@@ -280,6 +290,8 @@ def main():
     logging.debug("virt-v2v capabilities: %r" % virt_v2v_caps)
 
     validate_data(host, data)
+    if STATE.pre_copy:
+        STATE.pre_copy.init_disk_data()
 
     try:
         #
@@ -327,7 +339,7 @@ def main():
                                                    host)
                     })
 
-        if 'source_disks' in data:
+        if STATE.pre_copy is None and 'source_disks' in data:
             logging.debug('Initializing disk list from %r',
                           data['source_disks'])
             for d in data['source_disks']:
@@ -352,11 +364,19 @@ def main():
                 data, host.get_uid(), host.get_gid())
             if agent_pid is None:
                 raise RuntimeError('Failed to start ssh-agent')
-        wrapper(host, data, virt_v2v_caps, agent_sock)
+        if STATE.pre_copy:
+            host.prepare_disks(data)
+            STATE.pre_copy.copy_disks(data['vmware_password_file'])
+        if not STATE.failed:
+            wrapper(host, data, virt_v2v_caps, agent_sock)
         if agent_pid is not None:
             os.kill(agent_pid, signal.SIGTERM)
+
         if not STATE.failed:
-            STATE.failed = not host.handle_finish(data)
+            if STATE.pre_copy:
+                STATE.pre_copy.finish()
+            host.handle_finish(data)
+
     except Exception as e:
         error_name = e.args[0] if e.args else "Wrapper failure"
         error(error_name, 'An error occured, finishing state file...',
@@ -407,7 +427,11 @@ def validate_data(host, data):
     else:
         data['network_mappings'] = []
 
+    if 'two_phase' not in data:
+        data['two_phase'] = False
+
     host.validate_data(data)
+    STATE.pre_copy = PreCopy(data)
 
 
 def finish(host, data, password_files):
@@ -420,6 +444,12 @@ def finish(host, data, password_files):
             host.handle_cleanup(data)
         except Exception:
             logging.exception("Got exception while cleaning up data")
+
+        if STATE.pre_copy:
+            try:
+                STATE.pre_copy.cleanup()
+            except Exception:
+                logging.exception("Got exception while cleaning up data")
 
     # Remove password files
     logging.info('Removing password files')

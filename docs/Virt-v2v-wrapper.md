@@ -154,10 +154,10 @@ Example:
 State file is a JSON file. Its content changes as the conversion goes through
 various stages. With it also the keys present in the file.
 
-If two-phase conversion is selected there will be a key `pre_copy` with various
-information related to the first (pre-copy) phase of the conversion.  The
-particular keys and information is, at the time of this writing, subject to
-change, but whould be as self-explanatory as possible.
+the output differs based on the type of conversion that is running:
+
+<a id="anchor_onephase"></a>
+### One-Phase Conversion
 
 Once virt-v2v is executed the state file is created with the following keys:
 
@@ -203,6 +203,15 @@ Right before the wrapper terminates it updates the state with:
 
 * `failed`: with value `true` if the conversion process failed.
 
+### Two-Phase Conversion
+
+* `disks`: This key includes a list of disks and for each one there is
+  information about the progress of copying disks before running virt-v2v.  The
+  data are pulled from the source server and they are being updated depending on
+  the progress.
+  
+Once virt-v2v is started all keys from the [One-Phase Conversion](#anchor_onephase)
+except `disks` and `disk_count` are updated in a similar fashion.
 
 ## LUKS encrypted devices
 

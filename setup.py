@@ -23,7 +23,14 @@ setup(
     },
     install_requires=[
         'pycurl',
-        'six'
+        'six',
+        'libvirt-python',
+        'pyvmomi',
+        'packaging',
+        # TODO: Uncomment this when it becomes available in pypi and also do
+        # the same in Pipfile, add it to requirements.txt and remove the mocked
+        # nbd.py
+        # 'libnbd-python',
     ],
     extras_require={
         'ovirt': 'ovirt-engine-sdk-python',

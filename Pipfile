@@ -7,6 +7,12 @@ name = "pypi"
 ovirt-engine-sdk-python = "*"
 pycurl = "*"
 six = "*"
+libvirt-python = "*"
+pyvmomi = "*"
+packaging = "*"
+# TODO: Uncomment this when it becomes available in pypi and also do the same in
+# setup.py, add it to requirements.txt and remove the mocked nbd.py
+# libnbd-python = ">1.0.0"
 
 [dev-packages]
 yamllint = "*"

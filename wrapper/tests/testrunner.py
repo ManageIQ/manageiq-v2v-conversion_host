@@ -7,6 +7,7 @@ from test_ovirt import *  # NOQA
 from test_routines import *  # NOQA
 from test_state import *  # NOQA
 from test_v2v_args import *  # NOQA
+from test_pre_copy import *  # NOQA
 
 if __name__ == '__main__':
     unittest.main()

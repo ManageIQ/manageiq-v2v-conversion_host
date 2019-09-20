@@ -6,3 +6,6 @@ tox
 flake8
 pep8-naming
 pylint
+libvirt-python
+pyvmomi
+packaging

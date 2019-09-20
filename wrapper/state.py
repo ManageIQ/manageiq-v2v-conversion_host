@@ -64,6 +64,7 @@ class _State(StateObject):
         'internal',
         'last_message',
         'pid',
+        'pre_copy',
         'return_code',
         'started',
         'vm_id',
@@ -74,6 +75,7 @@ class _State(StateObject):
         'v2v_log',
         'machine_readable_log',
         'wrapper_log',
+        'pre_copy',
     ]
 
     def __init__(self):
@@ -100,6 +102,7 @@ class _State(StateObject):
         }
         self.last_message = None
         self.pid = None
+        self.pre_copy = None
         self.started = None
         self.return_code = None
         self.vm_id = None

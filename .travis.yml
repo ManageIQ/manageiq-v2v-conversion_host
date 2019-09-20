@@ -19,6 +19,7 @@ addons:
     packages:
       - python-pip
       - libgnutls.dev  # required by pycurl
+      - libvirt.dev
 
 install:
   - pip install tox

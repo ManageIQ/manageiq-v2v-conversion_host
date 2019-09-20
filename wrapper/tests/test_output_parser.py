@@ -11,6 +11,10 @@ class TestOutputParser(unittest.TestCase):
         STATE.v2v_log = '/dev/null'
         STATE.machine_readable_log = '/dev/null'
 
+    def tearDown(self):
+        # Destroy any previous state
+        STATE.reset()
+
     def test_disk_number(self):
         with wrapper.log_parser() as parser:
             parser._current_disk = 0
@@ -89,3 +93,23 @@ class TestOutputParser(unittest.TestCase):
             self.assertEqual(
                 STATE.internal['disk_ids'][2],
                 'd85b7a6f-bffa-4b77-93df-912afd6e7014')
+
+    def test_two_phase(self):
+        # For two-phase conversion the log parser should not update anything
+        STATE.pre_copy = True
+
+        with wrapper.log_parser() as parser:
+            parser._current_disk = 0
+            parser._current_path = '/path1'
+            STATE.disks = [
+                Disk('[store1] path1.vmdk'),
+                Disk('[store1] path2.vmdk'),
+                Disk('[store1] path3.vmdk'),
+                ]
+            parser.parse_line(b'Copying disk 2/3 to /some/path')
+            self.assertEqual(parser._current_disk, 0)
+
+            parser._current_path = '/path1'
+            STATE.disks = [Disk('/path1', 0.0)]
+            parser.parse_line(b'  (10.42/100%)')
+            self.assertEqual(STATE.disks[0].progress, 0)

@@ -77,6 +77,12 @@ class _BaseHost(object):
         """ Validate input data, fill in defaults, etc """
         hard_error("Cannot validate data for unknown host type")
 
+    def prepare_disks(self, data):
+        """ Validate input data, fill in defaults, etc """
+        if data['two_phase']:
+            hard_error("Host implementation did not forbid two phase "
+                       "conversion, but did not implement `prepare_disks`")
+
 
 class KubevirtHost(_BaseHost):
 
@@ -152,7 +158,11 @@ class KubevirtHost(_BaseHost):
 
     def validate_data(self, data):
         """ Validate input data, fill in defaults, etc """
-        pass
+        if data['two_phase']:
+            # If adding support for two-phase conversion, do not forget to fix
+            # the update_progress() method
+            hard_error('Two-phase conversion is not supported for '
+                       'Kubevirt host')
 
 
 class _K8SCommunicator(object):
@@ -482,6 +492,9 @@ class OpenstackHost(_BaseHost):
         for mapping in data['network_mappings']:
             if 'mac_address' not in mapping:
                 hard_error('Missing mac address in one of network mappings')
+        if data['two_phase']:
+            hard_error('Two-phase conversion is not supported for '
+                       'Openstack host')
         return data
 
     def _check_ip_in_network(self, ipaddr, network):
@@ -706,6 +719,10 @@ class OvirtHost(_BaseHost):
                     hard_error('Missing argument: %s' % k)
         else:
             hard_error('No target specified')
+
+        if data['two_phase']:
+            hard_error('Two-phase conversion is not supported for '
+                       'Ovirt host')
 
         if 'rhv_url' in data:
             with self.sdk_connection(data) as c:

@@ -9,13 +9,17 @@ The expected usage is as follows:
 
 1)  *wrapper start*: client runs the wrapper; at the moment there are no
     command line arguments and everything is configured by JSON data presented
-    on stdin.
+    on stdin
 
 2)  *initialization*: wrapper read JSON data from stdin, parses and validates
     the content; based on the situation it may also change the effective user
     to a non-root account; wrapper writes to stdout simple JSON containing
     paths to wrapper log file (`wrapper_log`), virt-v2v log file (`v2v_log`),
     state file (`state_file`) that can be used to monitor the progress
+
+3)  Optionally, if `two_phase` conversion is selected (not supported for all
+    input and output modes), it will copy the disks to their destinations and
+    generate a libvirt XML to be used as an input to the virt-v2v process
 
 4)  *conversion*: finally, virt-v2v process is executed; wrapper monitors its
     output and updates the state file on a regular basis
@@ -54,6 +58,12 @@ following can be specified:
 
 * `ssh_key`: optional, private part of SSH key to use. If this is not provided
   then keys in ~/.ssh directory are used.
+
+Two-phase conversion can be requested by setting `two_phase` to `True` at which
+point the following key is mandatory:
+
+* `conversion_host_uuid`: the UUID of a VM in which the actual conversion is
+  being performed.
 
 Output configuration: reffer to the section [Output
 configuration](#output-configuration) below.
@@ -143,6 +153,11 @@ Example:
 
 State file is a JSON file. Its content changes as the conversion goes through
 various stages. With it also the keys present in the file.
+
+If two-phase conversion is selected there will be a key `pre_copy` with various
+information related to the first (pre-copy) phase of the conversion.  The
+particular keys and information is, at the time of this writing, subject to
+change, but whould be as self-explanatory as possible.
 
 Once virt-v2v is executed the state file is created with the following keys:
 

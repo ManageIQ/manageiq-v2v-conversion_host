@@ -693,25 +693,26 @@ class OvirtHost(_BaseHost):
         else:
             hard_error('No target specified')
 
-        if 'allocation' not in data:
-            # Check storage domain type and decide on suitable allocation type
-            # Note: This is only temporary. We should get the info from the
-            # caller in the future.
-            domain_type = None
-            with self.sdk_connection(data) as c:
-                service = c.system_service().storage_domains_service()
-                domains = service.list(search='name="%s"' %
-                                       str(data['rhv_storage']))
-                if len(domains) != 1:
-                    hard_error('Found %d domains matching "%s"!' %
-                               (len(domains), data['rhv_storage']))
-                domain_type = domains[0].storage.type
-            logging.info('Storage domain "%s" is of type %r',
-                         data['rhv_storage'], domain_type)
-            data['allocation'] = 'sparse'
-            if domain_type in self.PREALLOCATED_STORAGE_TYPES:
-                data['allocation'] = 'preallocated'
-            logging.info('... selected allocation type is %s',
-                         data['allocation'])
+        if 'rhv_url' in data:
+            if 'allocation' not in data:
+                # Check storage domain type and decide on suitable allocation
+                # type Note: This is only temporary. We should get the info
+                # from the caller in the future.
+                domain_type = None
+                with self.sdk_connection(data) as c:
+                    service = c.system_service().storage_domains_service()
+                    domains = service.list(search='name="%s"' %
+                                           str(data['rhv_storage']))
+                    if len(domains) != 1:
+                        hard_error('Found %d domains matching "%s"!' %
+                                   (len(domains), data['rhv_storage']))
+                    domain_type = domains[0].storage.type
+                logging.info('Storage domain "%s" is of type %r',
+                             data['rhv_storage'], domain_type)
+                data['allocation'] = 'sparse'
+                if domain_type in self.PREALLOCATED_STORAGE_TYPES:
+                    data['allocation'] = 'preallocated'
+                logging.info('... selected allocation type is %s',
+                             data['allocation'])
 
         return data

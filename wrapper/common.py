@@ -74,6 +74,7 @@ def hard_error(msg):
     """
     logging.error(msg)
     sys.stderr.write(msg)
+    sys.stderr.write('\n')
     sys.exit(1)
 
 

@@ -227,9 +227,7 @@ Right before the wrapper terminates it updates the state with:
 
 * `finished`: with value `true`
 
-* `failed`: with value `true` if the conversion process failed. If everything
-  went OK, this key is not present. Existence of this key is the main way how
-  to check whether the conversion succeeded or not.
+* `failed`: with value `true` if the conversion process failed.
 
 
 ## Conversion throttling (rate limiting)

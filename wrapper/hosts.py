@@ -643,7 +643,7 @@ class OvirtHost(BaseHost):
                         disk_service.remove()
                         disk_ids.remove(disk_id)
                     except self.sdk.NotFoundError:
-                        logging.info('Disk id=%s does not exist (already ' +
+                        logging.info('Disk id=%s does not exist (already '
                                      'removed?), skipping it',
                                      disk_id)
                         disk_ids.remove(disk_id)

@@ -30,7 +30,7 @@ import time
 
 from .state import STATE, Disk
 from .common import error, hard_error, log_command_safe
-from .hosts import BaseHost, KubevirtHost
+from .hosts import detect_host, KubevirtHost
 from .log_parser import log_parser
 from .checks import CHECKS
 
@@ -244,9 +244,7 @@ def main():
 
     # Read and parse input -- hopefully this should be safe to do as root
     data = json.load(sys.stdin)
-
-    host_type = BaseHost.detect(data)
-    host = BaseHost.factory(host_type)
+    host = detect_host(data)
 
     # The logging is delayed until we now which user runs the wrapper.
     # Otherwise we would have two logs.

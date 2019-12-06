@@ -94,6 +94,7 @@ class _State(_StateObject):
             'disk_ids': {},
             'display_name': None,
             'ports': [],
+            'duplicate_logs': False,
         }
         self.last_message = None
         self.pid = None

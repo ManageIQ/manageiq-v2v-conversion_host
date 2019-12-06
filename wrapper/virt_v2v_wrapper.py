@@ -30,7 +30,7 @@ import time
 
 from .state import STATE, Disk
 from .common import error, hard_error, log_command_safe
-from .hosts import detect_host, KubevirtHost
+from .hosts import detect_host
 from .log_parser import log_parser
 from .checks import CHECKS
 
@@ -123,7 +123,7 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
     try:
         STATE.started = True
         STATE.write()
-        with log_parser(isinstance(host, KubevirtHost)) as parser:
+        with log_parser(STATE.internal['duplicate_logs']) as parser:
             while runner.is_running():
                 parser.parse()
                 STATE.write()

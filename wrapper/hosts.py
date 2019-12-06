@@ -22,39 +22,23 @@ from .state import STATE
 TIMEOUT = 300
 
 
-class BaseHost(object):
-    TYPE_UNKNOWN = 'unknown'
-    TYPE_OPENSTACK = 'openstack'
-    TYPE_KUBEVIRT = 'kubevirt'
-    TYPE_OVIRT = 'ovirt'
-    TYPE = TYPE_UNKNOWN
+# NOTE: This in reality binds output method (rhv-upload, openstack) to the
+#       host type (VDSM, EL) we run on. This is not ideal as we should be
+#       able to use any (or at least some) combinations (e.g. rhv-upload
+#       from EL system). But nobody asked for this feature yet.
+def detect_host(data):
+    if 'export_domain' in data or \
+       'rhv_url' in data:
+        return OvirtHost()
+    elif 'osp_environment' in data:
+        return OpenstackHost()
+    elif os.path.exists('data/vm'):
+        return KubevirtHost()
+    else:
+        raise ValueError("Cannot detect type of host")
 
-    # NOTE: This in reality binds output method (rhv-upload, openstack) to the
-    #       host type (VDSM, EL) we run on. This is not ideal as we should be
-    #       able to use any (or at least some) combinations (e.g. rhv-upload
-    #       from EL system). But nobody asked for this feature yet.
-    @staticmethod
-    def detect(data):
-        if 'rhv_url' in data:
-            return BaseHost.TYPE_OVIRT
-        elif 'osp_environment' in data:
-            return BaseHost.TYPE_OPENSTACK
-        elif os.path.exists('/data/vm'):
-            return BaseHost.TYPE_KUBEVIRT
-        else:
-            return BaseHost.TYPE_UNKNOWN
 
-    @staticmethod
-    def factory(host_type):
-        if host_type == BaseHost.TYPE_OPENSTACK:
-            return OpenstackHost()
-        if host_type == BaseHost.TYPE_OVIRT:
-            return OvirtHost()
-        if host_type == BaseHost.TYPE_KUBEVIRT:
-            return KubevirtHost()
-        else:
-            raise ValueError("Cannot build host of type: %r" % host_type)
-
+class _BaseHost(object):
     def __init__(self):
         self._tag = '%s-%d' % (time.strftime('%Y%m%dT%H%M%S'), os.getpid())
 
@@ -98,12 +82,11 @@ class BaseHost(object):
         hard_error("Cannot validate data for unknown host type")
 
 
-class KubevirtHost(BaseHost):
-    TYPE = BaseHost.TYPE_KUBEVIRT
+class KubevirtHost(_BaseHost):
 
     def __init__(self):
         super(KubevirtHost, self).__init__()
-        self._k8s = K8SCommunicator()
+        self._k8s = _K8SCommunicator()
         self._tag = '123'
 
     def create_runner(self, *args, **kwargs):
@@ -177,7 +160,7 @@ class KubevirtHost(BaseHost):
         pass
 
 
-class K8SCommunicator(object):
+class _K8SCommunicator(object):
 
     def __init__(self):
         self._host = os.environ['KUBERNETES_SERVICE_HOST']
@@ -244,8 +227,7 @@ class K8SCommunicator(object):
             c.close()
 
 
-class OpenstackHost(BaseHost):
-    TYPE = BaseHost.TYPE_OPENSTACK
+class OpenstackHost(_BaseHost):
 
     def create_runner(self, *args, **kwargs):
         return SubprocessRunner(self, *args, **kwargs)
@@ -560,9 +542,8 @@ class OpenstackHost(BaseHost):
             return None
 
 
-class OvirtHost(BaseHost):
+class OvirtHost(_BaseHost):
     """ Encapsulates data and methods specific to oVirt/RHV environment """
-    TYPE = BaseHost.TYPE_OVIRT
 
     # TODO: remove once virt-v2v supports global trust store
     CA_PATH = '/etc/pki/ca-trust/source/anchors'

@@ -1,5 +1,5 @@
 import unittest
-from wrapper import hosts
+from wrapper.hosts import OvirtHost
 
 
 class TestOvirt(unittest.TestCase):
@@ -42,7 +42,7 @@ class TestOvirt(unittest.TestCase):
             '-oo', 'rhv-direct',
             '-oo', 'rhv-verifypeer=true',
         ]
-        host = hosts.BaseHost.factory(hosts.BaseHost.TYPE_OVIRT)
+        host = OvirtHost()
         v2v_args, v2v_env = host.prepare_command(
                 data, [], {}, [])
         self.assertEqual(v2v_args, expected)
@@ -63,7 +63,7 @@ class TestOvirt(unittest.TestCase):
             '-oo', 'rhv-direct',
             '-oo', 'rhv-verifypeer=false',
         ]
-        host = hosts.BaseHost.factory(hosts.BaseHost.TYPE_OVIRT)
+        host = OvirtHost()
         v2v_args, v2v_env = host.prepare_command(
                 data, [], {}, [])
         self.assertEqual(v2v_args, expected)

@@ -357,92 +357,82 @@ def main():
                                                    host)
                     })
 
-        try:
-            if 'source_disks' in data:
-                logging.debug('Initializing disk list from %r',
-                              data['source_disks'])
-                for d in data['source_disks']:
-                    STATE.disks.append(Disk(d, 0))
-                logging.debug('Internal disk list: %r', STATE.disks)
-                STATE.disk_count = len(data['source_disks'])
-            # Create state file before dumping the JSON
-            STATE.write()
-
-            # Send some useful info on stdout in JSON
-            print(json.dumps({
-                'v2v_log': STATE.v2v_log,
-                'wrapper_log': wrapper_log,
-                'state_file': STATE.state_file,
-            }))
-
-            # Let's get to work
-            handler = logging.StreamHandler(sys.stdout)
-            handler.setLevel(logging.DEBUG)
-            # TODO: drop junk from virt-v2v log
-            formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            logging.getLogger().addHandler(handler)
-            agent_pid = None
-            agent_sock = None
-            if data['transport_method'] == 'ssh':
-                agent_pid, agent_sock = spawn_ssh_agent(
-                    data, host.get_uid(), host.get_gid())
-                if agent_pid is None:
-                    raise RuntimeError('Failed to start ssh-agent')
-            wrapper(host, data, virt_v2v_caps, agent_sock)
-            if agent_pid is not None:
-                os.kill(agent_pid, signal.SIGTERM)
-            if not STATE.failed:
-                STATE.failed = not host.handle_finish(data)
-        except Exception as e:
-            # No need to log the exception, it will get logged below
-            error(e.args[0],
-                  'An error occured, finishing state file...',
-                  exception=True)
-            STATE.failed = True
-            STATE.write()
-            raise
-        finally:
-            if STATE.failed:
-                # Perform cleanup after failed conversion
-                logging.debug('Cleanup phase')
-                try:
-                    host.handle_cleanup(data)
-                finally:
-                    STATE.finished = True
-                    STATE.write()
-
-        # Remove password files
-        logging.info('Removing password files')
-        for f in password_files:
-            try:
-                os.remove(f)
-            except OSError:
-                error('Error removing password file(s)',
-                      'Error removing password file: %s' % f,
-                      exception=True)
-
-        STATE.finished = True
+        if 'source_disks' in data:
+            logging.debug('Initializing disk list from %r',
+                          data['source_disks'])
+            for d in data['source_disks']:
+                STATE.disks.append(Disk(d, 0))
+            logging.debug('Internal disk list: %r', STATE.disks)
+            STATE.disk_count = len(data['source_disks'])
+        # Create state file before dumping the JSON
         STATE.write()
 
-    except Exception:
-        logging.exception('Wrapper failure')
-        # Remove password files
-        logging.info('Removing password files')
-        for f in password_files:
-            try:
-                os.remove(f)
-            except OSError:
-                error('Error removing password file(s)',
-                      'Error removing password file: %s' % f,
-                      exception=True)
+        # Send some useful info on stdout in JSON
+        print(json.dumps({
+            'v2v_log': STATE.v2v_log,
+            'wrapper_log': wrapper_log,
+            'state_file': STATE.state_file,
+        }))
+
+        # Let's get to work
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(logging.DEBUG)
+        # TODO: drop junk from virt-v2v log
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        logging.getLogger().addHandler(handler)
+        agent_pid = None
+        agent_sock = None
+        if data['transport_method'] == 'ssh':
+            agent_pid, agent_sock = spawn_ssh_agent(
+                data, host.get_uid(), host.get_gid())
+            if agent_pid is None:
+                raise RuntimeError('Failed to start ssh-agent')
+        wrapper(host, data, virt_v2v_caps, agent_sock)
+        if agent_pid is not None:
+            os.kill(agent_pid, signal.SIGTERM)
+        if not STATE.failed:
+            STATE.failed = not host.handle_finish(data)
+    except Exception as e:
+        error_name = e.args[0] if e.args else "Wrapper failure"
+        error(error_name, 'An error occured, finishing state file...',
+              exception=True)
+        STATE.failed = True
+        STATE.write()
         # Re-raise original error
         raise
+    finally:
+        finish(host, data, password_files)
 
     logging.info('Finished')
     if STATE.failed:
         sys.exit(2)
+
+
+def finish(host, data, password_files):
+    if STATE.failed:
+        # Perform cleanup after failed conversion
+        logging.debug('Cleanup phase')
+        # Need to clean up as much as possible, even if only one tiny clean up
+        # function fails
+        try:
+            host.handle_cleanup(data)
+        except Exception:
+            logging.exception("Got exception while cleaning up data")
+
+    # Remove password files
+    logging.info('Removing password files')
+    for f in password_files:
+        try:
+            os.remove(f)
+        except OSError:
+            error('Error removing password file(s)',
+                  'Error removing password file: %s' % f,
+                  exception=True)
+
+    STATE.finished = True
+    STATE.write()
 
 
 # }}}

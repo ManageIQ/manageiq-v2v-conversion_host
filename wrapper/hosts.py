@@ -88,6 +88,9 @@ class KubevirtHost(_BaseHost):
         super(KubevirtHost, self).__init__()
         self._k8s = _K8SCommunicator()
         self._tag = '123'
+        # This could be stored in the host and just requested instead of the
+        # class changing an external behaviour.
+        STATE.internal['duplicate_logs'] = True
 
     def create_runner(self, *args, **kwargs):
         return SubprocessRunner(self, *args, **kwargs)

@@ -11,3 +11,5 @@ dist/
 venv/
 *.egg-info/
 .eggs/
+
+Pipfile.lock

@@ -1,0 +1,16 @@
+[[source]]
+url = "https://pypi.python.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+ovirt-engine-sdk-python = "*"
+pycurl = "*"
+six = "*"
+
+[dev-packages]
+yamllint = "*"
+tox = "*"
+"flake8" = "*"
+"pep8-naming" = "*"
+pylint = "*"

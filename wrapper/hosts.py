@@ -601,34 +601,37 @@ class OvirtHost(_BaseHost):
                 logging.exception('Failed to cancel transfers')
 
             # ... then delete the uploaded disks
-            logging.info('Removing disks: %r', disk_ids)
-            endt = time.time() + TIMEOUT
-            while len(disk_ids) > 0:
-                for disk_id in disk_ids[:]:
-                    try:
-                        disk_service = disks_service.disk_service(disk_id)
-                        disk = disk_service.get()
-                        if disk.status != self.sdk.types.DiskStatus.OK:
-                            continue
-                        logging.info('Removing disk id=%s', disk_id)
-                        disk_service.remove()
-                        disk_ids.remove(disk_id)
-                    except self.sdk.NotFoundError:
-                        logging.info('Disk id=%s does not exist (already '
-                                     'removed?), skipping it',
-                                     disk_id)
-                        disk_ids.remove(disk_id)
-                    except self.sdk.Error:
-                        logging.exception('Failed to remove disk id=%s',
-                                          disk_id)
-                # Avoid checking timeouts, and waiting, if there are no
-                # more disks to remove
-                if len(disk_ids) > 0:
-                    if time.time() > endt:
-                        logging.error('Timed out waiting for disks: %r',
-                                      disk_ids)
-                        break
-                    time.sleep(1)
+            self._delete_disks(disks_service, disk_ids)
+
+    def _delete_disks(self, disks_service, disk_ids):
+        logging.info('Removing disks: %r', disk_ids)
+        endt = time.time() + TIMEOUT
+        while len(disk_ids) > 0:
+            for disk_id in disk_ids[:]:
+                try:
+                    disk_service = disks_service.disk_service(disk_id)
+                    disk = disk_service.get()
+                    if disk.status != self.sdk.types.DiskStatus.OK:
+                        continue
+                    logging.info('Removing disk id=%s', disk_id)
+                    disk_service.remove()
+                    disk_ids.remove(disk_id)
+                except self.sdk.NotFoundError:
+                    logging.info('Disk id=%s does not exist (already '
+                                 'removed?), skipping it',
+                                 disk_id)
+                    disk_ids.remove(disk_id)
+                except self.sdk.Error:
+                    logging.exception('Failed to remove disk id=%s',
+                                      disk_id)
+            # Avoid checking timeouts, and waiting, if there are no
+            # more disks to remove
+            if len(disk_ids) > 0:
+                if time.time() > endt:
+                    logging.error('Timed out waiting for disks: %r',
+                                  disk_ids)
+                    break
+                time.sleep(1)
 
     def prepare_command(self, data, v2v_args, v2v_env, v2v_caps):
         v2v_args.extend([

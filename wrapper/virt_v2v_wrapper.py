@@ -44,8 +44,9 @@ DEVNULL = getattr(subprocess, 'DEVNULL', open(os.devnull, 'r+'))
 # Wrapper version
 VERSION = "23"
 
+RUN_DIR = '/var/lib/uci'
+LOG_DIR = '/var/log/uci'
 LOG_LEVEL = logging.DEBUG
-STATE_DIR = '/tmp'
 
 
 ############################################################################
@@ -388,17 +389,12 @@ def main():
 
     # The logging is delayed until we now which user runs the wrapper.
     # Otherwise we would have two logs.
-    log_tag = host.get_tag()
-    log_dirs = host.get_logs()
-    STATE.v2v_log = os.path.join(log_dirs[0], 'v2v-import-%s.log' % log_tag)
-    STATE.machine_readable_log = os.path.join(
-        log_dirs[0], 'v2v-import-%s-mr.log' % log_tag)
-    wrapper_log = os.path.join(log_dirs[1],
-                               'v2v-import-%s-wrapper.log' % log_tag)
-    STATE.state_file = os.path.join(STATE_DIR, 'v2v-import-%s.state' % log_tag)
-    throttling_file = os.path.join(STATE_DIR,
-                                   'v2v-import-%s.throttle' % log_tag)
-    STATE.internal['throttling_file'] = throttling_file
+    STATE.v2v_log = os.path.join(LOG_DIR, 'virt-v2v.log')
+    STATE.machine_readable_log = os.path.join(LOG_DIR, 'virt-v2v-mr.log')
+    wrapper_log = os.path.join(LOG_DIR, 'virt-v2v-wrapper.log')
+    STATE.state_file = os.path.join(RUN_DIR, 'state.json')
+    throttling_file = os.path.join(RUN_DIR, 'limits.json')
+    STATE['internal']['throttling_file'] = throttling_file
 
     log_format = '%(asctime)s:%(levelname)s:' \
         + ' %(message)s (%(module)s:%(lineno)d)'

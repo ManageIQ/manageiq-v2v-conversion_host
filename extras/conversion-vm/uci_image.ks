@@ -88,20 +88,12 @@ NETWORKING=yes
 NOZEROCONF=yes
 EOF
 
-# Let's rebuild the ramfs with with base scsi drivers we need
-kversion=$(rpm -q kernel --qf '%{version}-%{release}.%{arch}\n')
-ramfsfile="/boot/initramfs-$kversion.img"
-
-drivers="mptbase mptscsih mptspi"
-
-dracut --force --add-drivers "$drivers" $ramfsfile $kversion
-
 # make sure there is a new line at the end of sshd_config
 echo "" >> /etc/ssh/sshd_config
 
 # Pull the latest IMS UCI Image
 
-podman pull --tls-verify=false registry-proxy.engineering.redhat.com/rh-osbs/container-native-virtualization-kubevirt-v2v-conversion:ims
+podman pull --tls-verify=false docker://registry-proxy.engineering.redhat.com/rh-osbs/container-native-virtualization-kubevirt-v2v-conversion:latest
 
 chvt 1
 

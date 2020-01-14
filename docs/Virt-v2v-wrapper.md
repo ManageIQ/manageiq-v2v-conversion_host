@@ -15,9 +15,7 @@ The expected usage is as follows:
     the content; based on the situation it may also change the effective user
     to a non-root account; wrapper writes to stdout simple JSON containing
     paths to wrapper log file (`wrapper_log`), virt-v2v log file (`v2v_log`),
-    state file (`state_file`) that can be used to monitor the progress and
-    throttling file (`throttling_file`) that can be used to apply resource
-    limiting
+    state file (`state_file`) that can be used to monitor the progress
 
 4)  *conversion*: finally, virt-v2v process is executed; wrapper monitors its
     output and updates the state file on a regular basis
@@ -84,8 +82,6 @@ Miscellaneous:
 
 * `allocation`: optional key specifying the allocation type to use; possible
   values are `preallocated` and `sparse`.
-
-* `throttling`: optional key with initial throttling option (see below)
 
 * `luks_keys_vault`: optional key to specify a JSON file containing the LUKS
   keys for encrypted devices (see below).
@@ -221,60 +217,7 @@ Right before the wrapper terminates it updates the state with:
 * `failed`: with value `true` if the conversion process failed.
 
 
-## Conversion throttling (rate limiting)
-
-It is possible to throttle resources used by the conversion. At the moment one
-can limit CPU and network bandwidth. Before wrapper detaches to background
-
-Example of throttling file content:
-
-```
-{
-    "cpu": "50%",
-    "network": "1048576"
-}
-```
-
-This will assign half of single CPU to the process and limit network bandwidth
-to 1 MB/s.
-
-Limits read from the throttling file are added to those already in place. That
-means one does not strictly need to include all the possible limits in the
-file. Although it is suggested to do so. Otherwise some information can be lost
-if multiple changes occur to the throttling file before the wrapper manages to
-read them.
-
-To remove a limit one should assign value `unlimited`.
-
-
-### CPU Usage
-
-Usage is expressed in percents of single CPU time.
-
-From systemd.resource-control(5):
-
-    Assign the specified CPU time quota to the processes executed. Takes a
-    percentage value, suffixed with "%". The percentage specifies how much CPU
-    time the unit shall get at maximum, relative to the total CPU time
-    available on one CPU. Use values > 100% for allotting CPU time on more than
-    one CPU. This controls the "cpu.max" attribute on the unified control group
-    hierarchy and "cpu.cfs_quota_us" on legacy.
-
-For example, to assign half of one CPU use "50%" or to assign two CPUs use
-"200%". To remove any limit on CPU one can pass the string "unlimited".
-
-
-### Network Bandwidth
-
-Due to design of cgroup filter on tc the network is limited on output only.
-(Input is limited only indirectly and is unreliable.)
-
-The limit is specified in bytes per seconds without any units. E.g. "12345".
-Note that despite being a number it should be passed as string in JSON. To
-remove any limit one can pass the string "unlimited".
-
-
-### LUKS encrypted devices
+## LUKS encrypted devices
 
 virt-v2v-wrapper always looks for a default path:
 `${HOME}/.v2v_luks_keys_vault.json`. The file MUST NOT be readable by group

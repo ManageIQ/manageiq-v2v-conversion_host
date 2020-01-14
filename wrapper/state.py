@@ -65,7 +65,6 @@ class _State(_StateObject):
         'pid',
         'return_code',
         'started',
-        'throttling',
         'vm_id',
     ]
 
@@ -95,14 +94,11 @@ class _State(_StateObject):
             'disk_ids': {},
             'display_name': None,
             'ports': [],
-            'throttling_file': None,
         }
         self.last_message = None
         self.pid = None
         self.started = None
         self.return_code = None
-        # Does it make sense to create a throttling class?
-        self.throttling = {'cpu': None, 'network': None}
         self.vm_id = None
 
     def write(self):

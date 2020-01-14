@@ -17,7 +17,6 @@
 # limitations under the License.
 #
 
-import errno
 import json
 import logging
 import os
@@ -26,7 +25,6 @@ import signal
 import subprocess
 import stat
 import sys
-import six
 import tempfile
 import time
 
@@ -110,82 +108,6 @@ def prepare_command(data, v2v_caps, agent_sock=None):
     return (v2v_args, v2v_env)
 
 
-def throttling_update(runner, initial=None):
-    """ Update throttling """
-    if initial is not None:
-        throttling = initial
-    else:
-        # Read from throttling file
-        try:
-            with open(STATE.internal['throttling_file']) as f:
-                throttling = json.load(f)
-            # Remove file when finished to prevent spamming logs with repeated
-            # messages
-            os.remove(STATE.internal['throttling_file'])
-            logging.info('Fetched updated throttling info from file')
-        except IOError as e:
-            if e.errno != errno.ENOENT:
-                error('Failed to read throttling file', exception=True)
-            return
-        except ValueError:
-            error('Failed to read throttling file', exception=True)
-            return
-
-    processed = {}
-    for k, v in six.iteritems(throttling):
-        if k == 'cpu':
-            if v is None or v == 'unlimited':
-                # Treat empty value and 'unlimited' in the same way
-                val = 'unlimited'
-                set_val = ''
-            else:
-                m = re.match("([+0-9]+)%?$", v)
-                if m is not None:
-                    val = r'%s%%' % m.group(1)
-                    set_val = val
-                else:
-                    error(
-                        'Failed to parse value for CPU limit',
-                        'Failed to parse value for CPU limit: %s', v)
-                    continue
-            if val != STATE.throttling['cpu'] and \
-                    runner.systemd_set_property('CPUQuota', set_val):
-                processed[k] = val
-            else:
-                error(
-                    'Failed to set CPU limit',
-                    'Failed to set CPU limit to %s', val)
-        elif k == 'network':
-            if v is None or v == 'unlimited':
-                # Treat empty value and 'unlimited' in the same way
-                val = 'unlimited'
-                set_val = 'unlimited'
-            else:
-                m = re.match("([+0-9]+)$", v)
-                if m is not None:
-                    val = m.group(1)
-                    set_val = val
-                else:
-                    error(
-                        'Failed to parse value for network limit',
-                        'Failed to parse value for network limit: %s', v)
-                    continue
-            if val != STATE.throttling['network'] and \
-                    runner.set_network_limit(set_val):
-                logging.debug(
-                    'Changing network throttling to %s (previous: %s)',
-                    val, STATE.throttling['network'])
-                processed[k] = val
-            else:
-                error(
-                    'Failed to set network limit',
-                    'Failed to set network limit to %s', val)
-        else:
-            logging.debug('Ignoring unknown throttling request: %s', k)
-    STATE.throttling.update(processed)
-    logging.info('New throttling setup: %r', STATE.throttling)
-
-
 def wrapper(host, data, v2v_caps, agent_sock=None):
 
     v2v_args, v2v_env = prepare_command(data, v2v_caps, agent_sock)
@@ -204,8 +126,6 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
         STATE.write()
         return
     STATE.pid = runner.pid
-    if 'throttling' in data:
-        throttling_update(runner, data['throttling'])
 
     try:
         STATE.started = True
@@ -215,7 +135,6 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
                 parser.parse()
                 STATE.write()
                 host.update_progress()
-                throttling_update(runner)
                 time.sleep(5)
             logging.info(
                 'virt-v2v terminated with return code %d',
@@ -342,7 +261,6 @@ def main():
     STATE.machine_readable_log = os.path.join(LOG_DIR, 'virt-v2v-mr.log')
     wrapper_log = os.path.join(LOG_DIR, 'virt-v2v-wrapper.log')
     STATE.state_file = os.path.join(RUN_DIR, 'state.json')
-    STATE.internal.throttling_file = os.path.join(RUN_DIR, 'limits.json')
 
     log_format = '%(asctime)s:%(levelname)s:' \
         + ' %(message)s (%(module)s:%(lineno)d)'
@@ -355,8 +273,6 @@ def main():
 
     logging.info('Will store virt-v2v log in: %s', STATE.v2v_log)
     logging.info('Will store state file in: %s', STATE.state_file)
-    logging.info('Will read throttling limits from: %s',
-                 STATE.internal['throttling_file'])
 
     password_files = []
 
@@ -478,7 +394,6 @@ def main():
                 'v2v_log': STATE.v2v_log,
                 'wrapper_log': wrapper_log,
                 'state_file': STATE.state_file,
-                'throttling_file': STATE.internal['throttling_file'],
             }))
 
             # Let's get to work

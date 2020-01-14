@@ -1,10 +1,6 @@
-import os
 import subprocess
 
 VIRT_V2V = '/usr/bin/virt-v2v'
-
-# TODO: [py2] Remove the line and use DEVNULL from subprocess directly
-DEVNULL = getattr(subprocess, 'DEVNULL', open(os.devnull, 'r+'))
 
 
 class BaseRunner(object):
@@ -61,7 +57,7 @@ class SubprocessRunner(BaseRunner):
         with open(self._log, 'w') as log:
             self._proc = subprocess.Popen(
                     [VIRT_V2V] + self._arguments,
-                    stdin=DEVNULL,
+                    stdin=subprocess.DEVNULL,
                     stderr=subprocess.STDOUT,
                     stdout=log,
                     env=self._environment,

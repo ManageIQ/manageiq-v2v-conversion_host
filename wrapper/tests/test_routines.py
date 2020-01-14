@@ -1,11 +1,6 @@
 import logging
 import unittest
-try:
-    # Python 2
-    from cStringIO import StringIO
-except ImportError:
-    # Python 3
-    from io import StringIO
+from io import StringIO
 
 from wrapper import virt_v2v_wrapper as wrapper
 

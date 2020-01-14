@@ -1,18 +1,12 @@
 import json
 import os
 import re
-import six
 import time
 import logging
 from contextlib import contextmanager
 
 from .state import STATE, Disk
 from .common import error
-
-if six.PY2:
-    py2unimode = 'U'
-else:
-    py2unimode = ''
 
 
 class OutputParser(object):
@@ -48,8 +42,8 @@ class OutputParser(object):
                     and os.path.exists(STATE.machine_readable_log):
                 continue
             time.sleep(1)
-        self._log = open(STATE.v2v_log, 'rb' + py2unimode)
-        self._machine_log = open(STATE.machine_readable_log, 'rb' + py2unimode)
+        self._log = open(STATE.v2v_log, 'rb')
+        self._machine_log = open(STATE.machine_readable_log, 'rb')
         self._current_disk = None
         self._current_path = None
         self._duplicate = duplicate
@@ -66,8 +60,7 @@ class OutputParser(object):
                 if message.get('type') == 'error':
                     message = message.get('message')
                     error('virt-v2v error: {}'.format(message))
-            # TODO: [py2] Just use JSONDecodeError
-            except getattr(json.decoder, 'JSONDecodeError', ValueError):
+            except json.decoder.JSONDecodeError:
                 logging.exception(
                     'Failed to parse line from'
                     ' virt-v2v machine readable output')

@@ -100,8 +100,6 @@ def prepare_command(data, v2v_caps, agent_sock=None):
         if data['backend'] == 'direct':
             logging.debug('Using direct backend. Hack, hack...')
         v2v_env['LIBGUESTFS_BACKEND'] = data['backend']
-    if 'virtio_win' in data:
-        v2v_env['VIRTIO_WIN'] = data['virtio_win']
     if agent_sock is not None:
         v2v_env['SSH_AUTH_SOCK'] = agent_sock
 
@@ -317,15 +315,6 @@ def main():
                 hard_error('"network_mappings" must be an array')
         else:
             data['network_mappings'] = []
-
-        # Virtio drivers
-        if 'virtio_win' in data:
-            # This is for backward compatibility
-            data['install_drivers'] = True
-        if 'install_drivers' in data:
-            host.check_install_drivers(data)
-        else:
-            data['install_drivers'] = False
 
         # Method dependent validation
         data = host.validate_data(data)

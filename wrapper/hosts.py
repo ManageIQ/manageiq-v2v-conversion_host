@@ -581,17 +581,7 @@ class VDSMHost(BaseHost):
     """ Encapsulates data and methods specific to oVirt/RHV environment """
     TYPE = BaseHost.TYPE_VDSM
 
-    TOOLS_PATTERNS = [
-        (7, br'RHV-toolsSetup_([0-9._]+)\.iso'),
-        (6, br'rhv-tools-setup\.iso'),
-        (5, br'RHEV-toolsSetup_([0-9._]+)\.iso'),
-        (4, br'rhev-tools-setup\.iso'),
-        (3, br'oVirt-toolsSetup_([a-z0-9._-]+)\.iso'),
-        (2, br'ovirt-tools-setup\.iso'),
-        (1, br'virtio-win-([0-9.]+).iso'),
-        (0, br'virtio-win\.iso'),
-        ]
-    VDSM_MOUNTS = '/rhev/data-center/mnt'
+    VDSM_LOG_DIR = '/var/log/vdsm/import'
     VDSM_CA = '/etc/pki/vdsm/certs/cacert.pem'
     VDSM_UID = 36  # vdsm
     VDSM_GID = 36  # kvm
@@ -688,43 +678,6 @@ class VDSMHost(BaseHost):
                                       disk_ids)
                         break
                     time.sleep(1)
-
-    def check_install_drivers(self, data):
-        """ Validate and/or find ISO with guest tools and drivers """
-        if 'virtio_win' in data and os.path.isabs(data['virtio_win']):
-            full_path = data['virtio_win']
-        else:
-            iso_domain = self._find_iso_domain()
-
-            iso_name = data.get('virtio_win')
-            if iso_name is not None:
-                if iso_domain is None:
-                    hard_error('ISO domain not found')
-            else:
-                if iso_domain is None:
-                    # This is not an error
-                    logging.warning('ISO domain not found' +
-                                    ' (but install_drivers is true).')
-                    data['install_drivers'] = False
-                    return
-
-                best_name = self._filter_iso_names(
-                        iso_domain, os.listdir(iso_domain))
-                if best_name is None:
-                    # Nothing found, this is not an error
-                    logging.warn('Could not find any ISO with drivers' +
-                                 ' (but install_drivers is true).')
-                    data['install_drivers'] = False
-                    return
-                iso_name = best_name
-
-            full_path = os.path.join(iso_domain, iso_name)
-
-        if not os.path.isfile(full_path):
-            hard_error('"virtio_win" must be a path or file name of image in '
-                       'ISO domain')
-        data['virtio_win'] = full_path
-        logging.info("virtio_win (re)defined as: %s", data['virtio_win'])
 
     def prepare_command(self, data, v2v_args, v2v_env, v2v_caps):
         v2v_args.extend([
@@ -843,83 +796,3 @@ class VDSMHost(BaseHost):
                          data['allocation'])
 
         return data
-
-    def _filter_iso_names(self, iso_domain, isos):
-        """ @isos is a list of file names or an iterator """
-        # (priority, pattern)
-        patterns = [(p[0], re.compile(p[1], re.IGNORECASE))
-                    for p in self.TOOLS_PATTERNS]
-        best_name = None
-        best_version = None
-        best_priority = -1
-
-        for fname in isos:
-            if not os.path.isfile(os.path.join(iso_domain, fname)):
-                continue
-            for priority, pat in patterns:
-                m = pat.match(fname)
-                if not m:
-                    continue
-                if len(m.groups()) == 0:
-                    version = b''
-                else:
-                    version = m.group(1)
-                logging.debug('Matched ISO %r (priority %d)', fname, priority)
-                if best_version is None or \
-                        best_priority < priority or \
-                        (best_version < version and best_priority == priority):
-                    best_name = fname
-                    best_version = version
-                    best_priority = priority
-
-        return best_name
-
-    def _find_iso_domain(self):
-        """
-        Find path to the ISO domain from available domains mounted on host
-        """
-        if not os.path.isdir(self.VDSM_MOUNTS):
-            logging.error('Cannot find RHV domains')
-            return None
-        for sub in os.walk(self.VDSM_MOUNTS):
-
-            if 'dom_md' in sub[1]:
-                # This looks like a domain so focus on metadata only
-                try:
-                    del sub[1][sub[1].index('master')]
-                except ValueError:
-                    pass
-                try:
-                    del sub[1][sub[1].index('images')]
-                except ValueError:
-                    pass
-                continue
-
-            if 'blockSD' in sub[1]:
-                # Skip block storage domains, we don't support ISOs there
-                del sub[1][sub[1].index('blockSD')]
-
-            if 'metadata' in sub[2] and \
-                    os.path.basename(sub[0]) == 'dom_md' and \
-                    self._is_iso_domain(os.path.join(sub[0], 'metadata')):
-                return os.path.join(
-                    os.path.dirname(sub[0]),
-                    'images',
-                    '11111111-1111-1111-1111-111111111111')
-        return None
-
-    def _is_iso_domain(self, path):
-        """
-        Check if domain is ISO domain. @path is path to domain metadata file
-        """
-        try:
-            logging.debug('_is_iso_domain check for %s', path)
-            with open(path, 'rb') as f:
-                for line in f:
-                    if line.rstrip() == b'CLASS=Iso':
-                        return True
-        except OSError:
-            error('Failed to read domain metadata', exception=True)
-        except IOError:
-            error('Failed to read domain metadata', exception=True)
-        return False

@@ -1,8 +1,6 @@
-from .hosts import BaseHost
-
-
 VDSM_MIN_RHV = '4.2.4'  # This has to match VDSM_MIN_VERSION!
 VDSM_MIN_VERSION = '4.20.31'  # RC4, final
+
 
 def check_rhv_version():
     try:

@@ -1,11 +1,4 @@
 import unittest
-try:
-    # Python3
-    from unittest.mock import patch
-except ImportError:
-    # Python2
-    from mock import patch
-
 from wrapper import hosts
 
 

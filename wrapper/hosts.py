@@ -53,7 +53,7 @@ class BaseHost(object):
             return BaseHost.TYPE_VDSM
         elif 'osp_environment' in data:
             return BaseHost.TYPE_OSP
-        elif not data['daemonize']:
+        elif os.path.exists('/data/vm'):
             return BaseHost.TYPE_CNV
         else:
             return BaseHost.TYPE_UNKNOWN

@@ -1,9 +1,9 @@
 # Virt-v2v Wrapper
 
 The script shields the caller from complexities involved in starting virt-v2v
-on oVirt/RHV host. It daemonizes to the background and monitors the progress
-of the conversion, providing the status information in a state file. This
-allows for asynchronous conversion workflow.
+on oVirt/RHV host. It monitors the progress of the conversion, providing the
+status information in a state file. This allows for asynchronous conversion
+workflow.
 
 The expected usage is as follows:
 
@@ -13,13 +13,11 @@ The expected usage is as follows:
 
 2)  *initialization*: wrapper read JSON data from stdin, parses and validates
     the content; based on the situation it may also change the effective user
-    to a non-root account
-
-3)  *daemonization*: wrapper writes to stdout simple JSON containing paths to
-    wrapper log file (`wrapper_log`), virt-v2v log file (`v2v_log`),
+    to a non-root account; wrapper writes to stdout simple JSON containing
+    paths to wrapper log file (`wrapper_log`), virt-v2v log file (`v2v_log`),
     state file (`state_file`) that can be used to monitor the progress and
     throttling file (`throttling_file`) that can be used to apply resource
-    limiting; after that it forks to the background
+    limiting
 
 4)  *conversion*: finally, virt-v2v process is executed; wrapper monitors its
     output and updates the state file on a regular basis
@@ -43,13 +41,6 @@ General information:
 
 * `transport_method`: type of transport to use; supported methods are `ssh` and
   `vddk`.
-
-* `daemonize`: boolean declaring whether to daemonize virt-v2v or not (default
-  is `true`). When virt-v2v is not daemonized it is not started in transient
-  systemd unit, that means throttling options are not available. On the other
-  hand it allows one to run the conversion in environment without systemd (e.g.
-  container). For Kubevirt container virt-v2v is never daemonized no matter
-  what this option is set to.
 
 For `vddk` the following keys need to be specified:
 

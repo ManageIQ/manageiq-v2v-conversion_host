@@ -51,7 +51,6 @@ class _State(_StateObject):
     """
 
     __slots__ = [
-        'daemonize',
         'state_file',
         'v2v_log',
         'machine_readable_log',
@@ -71,7 +70,6 @@ class _State(_StateObject):
     ]
 
     _hidden = [
-        'daemonize',
         'state_file',
         'v2v_log',
         'machine_readable_log',
@@ -85,7 +83,6 @@ class _State(_StateObject):
         This function exists only so that the state can be re-used in tests
         """
 
-        self.daemonize = True
         self.state_file = None
         self.v2v_log = None
         self.machine_readable_log = None

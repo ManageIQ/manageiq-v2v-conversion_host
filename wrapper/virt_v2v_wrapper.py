@@ -21,7 +21,6 @@ import errno
 import json
 import logging
 import os
-import pycurl
 import re
 import signal
 import subprocess
@@ -52,41 +51,6 @@ LOG_LEVEL = logging.DEBUG
 #
 #  Routines {{{
 #
-
-def daemonize():
-    """Properly deamonizes the process and closes file desriptors."""
-    sys.stderr.flush()
-    sys.stdout.flush()
-
-    pid = os.fork()
-    if pid != 0:
-        # Nothing more to do for the parent
-        sys.exit(0)
-
-    os.setsid()
-    pid = os.fork()
-    if pid != 0:
-        # Nothing more to do for the parent
-        sys.exit(0)
-
-    os.umask(0)
-    os.chdir('/')
-
-    dev_null = open('/dev/null', 'w')
-    os.dup2(dev_null.fileno(), sys.stdin.fileno())
-    os.dup2(dev_null.fileno(), sys.stdout.fileno())
-    os.dup2(dev_null.fileno(), sys.stderr.fileno())
-
-    # Re-initialize cURL. This is necessary to re-initialze the PKCS #11
-    # security tokens in NSS. Otherwise any use of SDK after the fork() would
-    # lead to the error:
-    #
-    #    A PKCS #11 module returned CKR_DEVICE_ERROR, indicating that a
-    #    problem has occurred with the token or slot.
-    #
-    pycurl.global_cleanup()
-    pycurl.global_init(pycurl.GLOBAL_ALL)
-
 
 def prepare_command(data, v2v_caps, agent_sock=None):
     v2v_args = [
@@ -369,12 +333,6 @@ def main():
     # Read and parse input -- hopefully this should be safe to do as root
     data = json.load(sys.stdin)
 
-    # Fill in defaults
-    if 'daemonize' not in data:
-        data['daemonize'] = STATE.daemonize
-    else:
-        STATE.daemonize = data['daemonize']
-
     host_type = BaseHost.detect(data)
     host = BaseHost.factory(host_type)
 
@@ -524,18 +482,13 @@ def main():
             }))
 
             # Let's get to work
-            if 'daemonize' not in data or data['daemonize']:
-                logging.info('Daemonizing')
-                daemonize()
-            else:
-                logging.info('Staying in foreground as requested')
-                handler = logging.StreamHandler(sys.stdout)
-                handler.setLevel(logging.DEBUG)
-                # TODO: drop junk from virt-v2v log
-                formatter = logging.Formatter(
-                    '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-                handler.setFormatter(formatter)
-                logging.getLogger().addHandler(handler)
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setLevel(logging.DEBUG)
+            # TODO: drop junk from virt-v2v log
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logging.getLogger().addHandler(handler)
             agent_pid = None
             agent_sock = None
             if data['transport_method'] == 'ssh':

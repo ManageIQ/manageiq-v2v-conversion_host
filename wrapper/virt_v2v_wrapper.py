@@ -34,9 +34,6 @@ from .hosts import BaseHost, CNVHost
 from .log_parser import log_parser
 from .checks import CHECKS
 
-# py2
-DEVNULL = getattr(subprocess, 'DEVNULL', open(os.devnull, 'r+'))
-
 # Wrapper version
 VERSION = "23"
 
@@ -169,7 +166,7 @@ def spawn_ssh_agent(data, uid, gid):
         out = subprocess.check_output(
             cmd,
             stderr=subprocess.STDOUT,
-            stdin=DEVNULL)
+            stdin=subprocess.DEVNULL)
     except subprocess.CalledProcessError as e:
         error('Failed to start ssh-agent', exception=True)
         logging.error('Command failed with: %s', e.output)
@@ -205,7 +202,7 @@ def spawn_ssh_agent(data, uid, gid):
             cmd,
             env=env,
             stderr=subprocess.STDOUT,
-            stdin=DEVNULL)
+            stdin=subprocess.DEVNULL)
     except subprocess.CalledProcessError as e:
         error('Failed to add SSH keys to the agent', exception=True)
         logging.error("ssh-add output: %s", e.output)

@@ -1,18 +1,6 @@
-%if 0%{?fedora} || 0%{?rhel} > 7
-%bcond_without python3
-%else
-%bcond_with python3
-%endif
-
-%if %{with python3}
 %global python %{__python3}
 BuildRequires: %{py3_dist setuptools}
 BuildRequires: python3-devel
-%else
-%global python %{__python}
-BuildRequires: python-setuptools
-BuildRequires: python-devel
-%endif
 
 %global rolename v2v-conversion-host
 %global roleprefix oVirt.
@@ -48,14 +36,8 @@ Ansible role to setup hosts as conversion host for ManageIQ
 Summary: Daemonizing wrapper for virt-v2v
 BuildArch: noarch
 Requires: libcgroup-tools
-%if %{with python3}
 Requires: python3
 Requires: %{py3_dist pycurl}
-%else
-Requires: python >= 2.7
-Requires: python-pycurl
-Requires: python-six
-%endif
 
 %description wrapper
 Daemonizing wrapper for virt-v2v.

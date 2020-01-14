@@ -34,7 +34,6 @@ import time
 from .state import STATE, Disk
 from .common import error, hard_error, log_command_safe
 from .hosts import BaseHost, CNVHost
-from .runners import SystemdRunner
 from .log_parser import log_parser
 from .checks import CHECKS
 
@@ -167,14 +166,6 @@ def throttling_update(runner, initial=None):
         except ValueError:
             error('Failed to read throttling file', exception=True)
             return
-
-    # Throttling works only when we have (temporary) systemd unit. We do the
-    # check here and not at the beginning because we want the throttling file
-    # to be removed. We don't want to spam logs with repeated messages.
-    if not isinstance(runner, SystemdRunner):
-        logging.warn(
-            'Not applying throttling because virt-v2v is not in systemd unit')
-        return
 
     processed = {}
     for k, v in six.iteritems(throttling):

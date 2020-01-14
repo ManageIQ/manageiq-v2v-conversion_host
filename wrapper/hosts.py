@@ -16,7 +16,7 @@ from io import BytesIO
 from six.moves.urllib.parse import urlparse
 
 from .common import error, hard_error, log_command_safe
-from .runners import SubprocessRunner, SystemdRunner
+from .runners import SubprocessRunner
 from .state import STATE
 
 
@@ -264,10 +264,7 @@ class OSPHost(BaseHost):
     TYPE = BaseHost.TYPE_OSP
 
     def create_runner(self, *args, **kwargs):
-        if STATE.daemonize:
-            return SystemdRunner(self, *args, **kwargs)
-        else:
-            return SubprocessRunner(self, *args, **kwargs)
+        return SubprocessRunner(self, *args, **kwargs)
 
     def handle_cleanup(self, data):
         """ Handle cleanup after failed conversion """
@@ -637,10 +634,7 @@ class VDSMHost(BaseHost):
                 connection.close()
 
     def create_runner(self, *args, **kwargs):
-        if STATE.daemonize:
-            return SystemdRunner(self, *args, **kwargs)
-        else:
-            return SubprocessRunner(self, *args, **kwargs)
+        return SubprocessRunner(self, *args, **kwargs)
 
     def handle_cleanup(self, data):
         with self.sdk_connection(data) as conn:

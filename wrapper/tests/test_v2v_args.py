@@ -72,21 +72,21 @@ class TestV2vArgs(unittest.TestCase):
         data['luks_keys_files'] = [
             {
                 'device': '/dev/sda1',
-                'filename': '/tmp/luks/sda1',
+                'filename': '/var/tmp/luks/sda1',
             },
             {
                 'device': '/dev/sda2',
-                'filename': '/tmp/luks/sda2',
+                'filename': '/var/tmp/luks/sda2',
             },
         ]
         v2v_args, v2v_env = wrapper.prepare_command(data, [])
         self.assert_has_args(
             v2v_args,
-            ['--key', '/dev/sda1:file:/tmp/luks/sda1'],
+            ['--key', '/dev/sda1:file:/var/tmp/luks/sda1'],
             'Looking for LUKS key of device sda1 %r' % v2v_args)
         self.assert_has_args(
             v2v_args,
-            ['--key', '/dev/sda2:file:/tmp/luks/sda2'],
+            ['--key', '/dev/sda2:file:/var/tmp/luks/sda2'],
             'Looking for LUKS key of device sda2 %r' % v2v_args)
 
     def test_network_mappings(self):

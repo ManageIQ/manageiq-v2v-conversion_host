@@ -77,9 +77,6 @@ class BaseHost(object):
     def create_runner(self, *args, **kwargs):
         raise NotImplementedError()
 
-    def get_logs(self):
-        return ('/tmp', '/tmp')
-
     def get_tag(self):
         return self._tag
 
@@ -125,11 +122,6 @@ class CNVHost(BaseHost):
 
     def create_runner(self, *args, **kwargs):
         return SubprocessRunner(self, *args, **kwargs)
-
-    def get_logs(self):
-        # TODO: we should either pipe everything to stdout or push to log
-        # collector
-        return ('/tmp', '/tmp')
 
     def handle_finish(self, data):
         """ Handle finish after successfull conversion """
@@ -276,12 +268,6 @@ class OSPHost(BaseHost):
             return SystemdRunner(self, *args, **kwargs)
         else:
             return SubprocessRunner(self, *args, **kwargs)
-
-    def get_logs(self):
-        log_dir = '/var/log/virt-v2v'
-        if not os.path.isdir(log_dir):
-            os.makedirs(log_dir)
-        return (log_dir, log_dir)
 
     def handle_cleanup(self, data):
         """ Handle cleanup after failed conversion """
@@ -608,7 +594,6 @@ class VDSMHost(BaseHost):
         (1, br'virtio-win-([0-9.]+).iso'),
         (0, br'virtio-win\.iso'),
         ]
-    VDSM_LOG_DIR = '/var/log/vdsm/import'
     VDSM_MOUNTS = '/rhev/data-center/mnt'
     VDSM_CA = '/etc/pki/vdsm/certs/cacert.pem'
     VDSM_UID = 36  # vdsm
@@ -656,10 +641,6 @@ class VDSMHost(BaseHost):
             return SystemdRunner(self, *args, **kwargs)
         else:
             return SubprocessRunner(self, *args, **kwargs)
-
-    def get_logs(self):
-        """ Returns tuple with directory for virt-v2v log and wrapper log """
-        return (self.VDSM_LOG_DIR, self.VDSM_LOG_DIR)
 
     def handle_cleanup(self, data):
         with self.sdk_connection(data) as conn:

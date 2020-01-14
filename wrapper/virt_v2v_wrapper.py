@@ -393,8 +393,7 @@ def main():
     STATE.machine_readable_log = os.path.join(LOG_DIR, 'virt-v2v-mr.log')
     wrapper_log = os.path.join(LOG_DIR, 'virt-v2v-wrapper.log')
     STATE.state_file = os.path.join(RUN_DIR, 'state.json')
-    throttling_file = os.path.join(RUN_DIR, 'limits.json')
-    STATE['internal']['throttling_file'] = throttling_file
+    STATE.internal.throttling_file = os.path.join(RUN_DIR, 'limits.json')
 
     log_format = '%(asctime)s:%(levelname)s:' \
         + ' %(message)s (%(module)s:%(lineno)d)'
@@ -407,7 +406,8 @@ def main():
 
     logging.info('Will store virt-v2v log in: %s', STATE.v2v_log)
     logging.info('Will store state file in: %s', STATE.state_file)
-    logging.info('Will read throttling limits from: %s', throttling_file)
+    logging.info('Will read throttling limits from: %s',
+                 STATE.internal['throttling_file'])
 
     password_files = []
 
@@ -529,7 +529,7 @@ def main():
                 'v2v_log': STATE.v2v_log,
                 'wrapper_log': wrapper_log,
                 'state_file': STATE.state_file,
-                'throttling_file': throttling_file,
+                'throttling_file': STATE.internal['throttling_file'],
             }))
 
             # Let's get to work

@@ -93,10 +93,8 @@ def prepare_command(data, v2v_caps, agent_sock=None):
     # Prepare environment
     v2v_env = os.environ.copy()
     v2v_env['LANG'] = 'C'
-    if 'backend' in data:
-        if data['backend'] == 'direct':
-            logging.debug('Using direct backend. Hack, hack...')
-        v2v_env['LIBGUESTFS_BACKEND'] = data['backend']
+    logging.debug('Using direct backend. Hack, hack...')
+    v2v_env['LIBGUESTFS_BACKEND'] = 'direct'
     if agent_sock is not None:
         v2v_env['SSH_AUTH_SOCK'] = agent_sock
 

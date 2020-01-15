@@ -33,6 +33,7 @@ from .common import error, hard_error, log_command_safe
 from .hosts import detect_host
 from .log_parser import log_parser
 from .checks import CHECKS
+from .runners import SubprocessRunner
 
 # Wrapper version
 VERSION = "23"
@@ -110,7 +111,7 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
     logging.info('Starting virt-v2v:')
     log_command_safe(v2v_args, v2v_env)
 
-    runner = host.create_runner(v2v_args, v2v_env, STATE.v2v_log)
+    runner = SubprocessRunner(v2v_args, v2v_env, STATE.v2v_log)
     try:
         runner.run()
     except RuntimeError:

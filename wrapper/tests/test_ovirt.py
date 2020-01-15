@@ -13,7 +13,6 @@ class TestOvirt(unittest.TestCase):
         'rhv_password_file': '/rhv/password',
         'rhv_cluster': 'Default',
         'rhv_storage': 'data',
-        'rhv_cafile': '/rhv/ca.pem',
 
         'vmware_fingerprint': '01:23:45:67:89:AB:CD:EA:DB:EE:F0:12:34:56:78:9A:BC:DE:F0:12',  # NOQA E501
         'vmware_uri': 'esx://root@1.2.3.4?',

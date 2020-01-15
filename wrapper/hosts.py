@@ -19,25 +19,13 @@ from .state import STATE
 
 
 TIMEOUT = 300
-#
-# Tweaks
-#
-# We cannot use the libvirt backend in virt-v2v and have to use direct backend
-# for several reasons:
-# - it is necessary on oVirt host when running as root; and we need to run as
-#   root when using export domain as target (we use vdsm user for other
-#   targets)
-# - SSH transport method cannot be used with libvirt because it does not pass
-#   SSH_AUTH_SOCK env. variable to the QEMU process
-# - OpenStack mode has to run as root so we need direct backend there too
-DIRECT_BACKEND = True
 
 
 class BaseHost(object):
     TYPE_UNKNOWN = 'unknown'
     TYPE_OSP = 'osp'
     TYPE_CNV = 'cnv'
-    TYPE_VDSM = 'vdsm'
+    TYPE_OVIRT = 'ovirt'
     TYPE = TYPE_UNKNOWN
 
     # NOTE: This in reality binds output method (rhv-upload, openstack) to the
@@ -46,9 +34,8 @@ class BaseHost(object):
     #       from EL system). But nobody asked for this feature yet.
     @staticmethod
     def detect(data):
-        if 'export_domain' in data or \
-                'rhv_url' in data:
-            return BaseHost.TYPE_VDSM
+        if 'rhv_url' in data:
+            return BaseHost.TYPE_OVIRT
         elif 'osp_environment' in data:
             return BaseHost.TYPE_OSP
         elif os.path.exists('/data/vm'):
@@ -60,8 +47,8 @@ class BaseHost(object):
     def factory(host_type):
         if host_type == BaseHost.TYPE_OSP:
             return OSPHost()
-        if host_type == BaseHost.TYPE_VDSM:
-            return VDSMHost()
+        if host_type == BaseHost.TYPE_OVIRT:
+            return OvirtHost()
         if host_type == BaseHost.TYPE_CNV:
             return CNVHost()
         else:
@@ -186,9 +173,7 @@ class CNVHost(BaseHost):
 
     def validate_data(self, data):
         """ Validate input data, fill in defaults, etc """
-        # No libvirt inside the POD, enforce direct backend
-        data['backend'] = 'direct'
-        return data
+        pass
 
 
 class K8SCommunicator(object):
@@ -486,8 +471,6 @@ class OSPHost(BaseHost):
 
     def validate_data(self, data):
         """ Validate input data, fill in defaults, etc """
-        # Enforce direct backend
-        data['backend'] = 'direct'
         # Check necessary keys
         for k in [
                 'osp_destination_project_id',
@@ -575,17 +558,16 @@ class OSPHost(BaseHost):
             return None
 
 
-class VDSMHost(BaseHost):
+class OvirtHost(BaseHost):
     """ Encapsulates data and methods specific to oVirt/RHV environment """
-    TYPE = BaseHost.TYPE_VDSM
+    TYPE = BaseHost.TYPE_OVIRT
 
-    VDSM_LOG_DIR = '/var/log/vdsm/import'
-    VDSM_CA = '/etc/pki/vdsm/certs/cacert.pem'
-    VDSM_UID = 36  # vdsm
-    VDSM_GID = 36  # kvm
+    # TODO: remove once virt-v2v supports global trust store
+    CA_PATH = '/etc/pki/ca-trust/source/anchors'
+    CA_FILE = 'v2v-conversion-host-ca-bundle.pem'
 
     def __init__(self):
-        super(VDSMHost, self).__init__()
+        super(OvirtHost, self).__init__()
         import ovirtsdk4 as sdk
         self.sdk = sdk
         # For now there are limited possibilities in how we can select
@@ -598,7 +580,6 @@ class VDSMHost(BaseHost):
             self.sdk.types.StorageType.ISCSI,
             self.sdk.types.StorageType.POSIXFS,
             )
-        self._export_domain = False
 
     @contextmanager
     def sdk_connection(self, data):
@@ -612,7 +593,6 @@ class VDSMHost(BaseHost):
                 url=str(data['rhv_url']),
                 username=str(username),
                 password=str(data['rhv_password']),
-                ca_file=str(data['rhv_cafile']),
                 log=logging.getLogger(),
                 insecure=insecure,
             )
@@ -694,49 +674,31 @@ class VDSMHost(BaseHost):
                 '-oc', data['rhv_url'],
                 '-os', data['rhv_storage'],
                 '-op', data['rhv_password_file'],
-                '-oo', 'rhv-cafile=%s' % data['rhv_cafile'],
+                # TODO: remove once virt-v2v supports global trust store
+                '-oo', 'rhv-cafile=%s/%s' % (self.CA_PATH, self.CA_FILE),
                 '-oo', 'rhv-cluster=%s' % data['rhv_cluster'],
                 '-oo', 'rhv-direct',
                 '-oo', 'rhv-verifypeer=%s' % verifypeer,
                 ])
-        elif 'export_domain' in data:
-            v2v_args.extend([
-                '-o', 'rhv',
-                '-os', data['export_domain'],
-                ])
-        if 'XDG_RUNTIME_DIR' in v2v_env and self.get_uid() != 0:
-            # Drop XDG_RUNTIME_DIR from environment. Otherwise it would "leak"
-            # throuh our su/sudo call and would cause permissions error for
-            # virt-v2v.
-            #
-            # https://bugzilla.redhat.com/show_bug.cgi?id=967509
-            logging.info('Dropping XDG_RUNTIME_DIR from environment.')
-            del v2v_env['XDG_RUNTIME_DIR']
 
         return v2v_args, v2v_env
 
     def get_uid(self):
         """ Tell under which user to run virt-v2v """
-        if self._export_domain:
-            # Need to be root to mount NFS share
-            return 0
-        return VDSMHost.VDSM_UID
+        return 0
 
     def get_gid(self):
         """ Tell under which group to run virt-v2v """
-        return VDSMHost.VDSM_GID
+        return 0
 
     def validate_data(self, data):
         """ Validate input data, fill in defaults, etc """
-        # Determine whether direct backend is required
-        direct_backend = DIRECT_BACKEND
-        if 'export_domain' in data:
-            # Cannot use libvirt backend as root on VDSM host due to
-            # permissions
-            direct_backend = True
-            self._export_domain = True
-        if direct_backend:
-            data['backend'] = 'direct'
+        # First, the connection options
+        if 'insecure_connection' not in data:
+            data['insecure_connection'] = False
+        if data['insecure_connection']:
+            logging.info(
+                'SSL verification is disabled for oVirt SDK connections')
 
         # Output file format (raw or qcow2)
         if 'output_format' in data:
@@ -746,7 +708,7 @@ class VDSMHost(BaseHost):
         else:
             data['output_format'] = 'raw'
 
-        # Targets (only export domain for now)
+        # Targets (only rhv_url domain for now)
         if 'rhv_url' in data:
             for k in [
                     'rhv_cluster',
@@ -755,22 +717,8 @@ class VDSMHost(BaseHost):
                     ]:
                 if k not in data:
                     hard_error('Missing argument: %s' % k)
-            if 'rhv_cafile' not in data:
-                logging.info('Path to CA certificate not specified')
-                data['rhv_cafile'] = VDSMHost.VDSM_CA
-                logging.info('... trying VDSM default: %s',
-                             data['rhv_cafile'])
-        elif 'export_domain' in data:
-            pass
         else:
             hard_error('No target specified')
-
-        # Insecure connection
-        if 'insecure_connection' not in data:
-            data['insecure_connection'] = False
-        if data['insecure_connection']:
-            logging.info(
-                'SSL verification is disabled for oVirt SDK connections')
 
         if 'allocation' not in data:
             # Check storage domain type and decide on suitable allocation type

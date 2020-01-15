@@ -1,8 +1,8 @@
-VDSM_MIN_RHV = '4.2.4'  # This has to match VDSM_MIN_VERSION!
+VDSM_MIN_OVIRT = '4.2.4'  # This has to match VDSK_MIN_VERSION!
 VDSM_MIN_VERSION = '4.20.31'  # RC4, final
 
 
-def check_rhv_version():
+def check_ovirt_version():
     try:
         import rpmUtils.transaction
         import rpmUtils.miscutils
@@ -23,10 +23,10 @@ def check_rhv_version():
         print('Version of VDSM on the host: {}{}'.format(
                 '' if vdsm['epoch'] is None else '%s:' % vdsm['epoch'],
                 vdsm['version']))
-    print('Minimal required oVirt/RHV version is %s' % VDSM_MIN_RHV)
+    print('Minimal required oVirt/RHV version is %s' % VDSM_MIN_OVIRT)
     return False
 
 
 CHECKS = {
-    'rhv-version': check_rhv_version,
+    'ovirt-version': check_ovirt_version,
 }

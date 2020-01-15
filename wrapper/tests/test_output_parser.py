@@ -81,7 +81,7 @@ class TestOutputParser(unittest.TestCase):
                 STATE.internal['disk_ids'][path],
                 b'11111111-1111-1111-1111-111111111111')
 
-    def test_osp_volume_uuid(self):
+    def test_openstack_volume_uuid(self):
         STATE.v2v_log = '/dev/null'
         STATE.machine_readable_log = '/dev/null'
         with wrapper.log_parser() as parser:

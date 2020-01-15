@@ -2,11 +2,11 @@ import unittest
 from wrapper import hosts
 
 
-class TestOSP(unittest.TestCase):
+class TestOpenstack(unittest.TestCase):
     """ Tests specific to OpenStack """
 
     def test_disk_naming(self):
-        host = hosts.OSPHost()
+        host = hosts.OpenstackHost()
         with self.assertRaises(ValueError):
             host._get_disk_name(0)
         self.assertEqual('vda', host._get_disk_name(1))
@@ -20,7 +20,7 @@ class TestOSP(unittest.TestCase):
         self.assertEqual('vdzz', host._get_disk_name(702))
 
     def test_ip_conversions(self):
-        host = hosts.OSPHost()
+        host = hosts.OpenstackHost()
         self.assertEqual(
             '11000000101010000000000000101010',
             host._ip_to_binary('192.168.0.42')

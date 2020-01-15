@@ -23,8 +23,8 @@ TIMEOUT = 300
 
 class BaseHost(object):
     TYPE_UNKNOWN = 'unknown'
-    TYPE_OSP = 'osp'
-    TYPE_CNV = 'cnv'
+    TYPE_OPENSTACK = 'openstack'
+    TYPE_KUBEVIRT = 'kubevirt'
     TYPE_OVIRT = 'ovirt'
     TYPE = TYPE_UNKNOWN
 
@@ -37,20 +37,20 @@ class BaseHost(object):
         if 'rhv_url' in data:
             return BaseHost.TYPE_OVIRT
         elif 'osp_environment' in data:
-            return BaseHost.TYPE_OSP
+            return BaseHost.TYPE_OPENSTACK
         elif os.path.exists('/data/vm'):
-            return BaseHost.TYPE_CNV
+            return BaseHost.TYPE_KUBEVIRT
         else:
             return BaseHost.TYPE_UNKNOWN
 
     @staticmethod
     def factory(host_type):
-        if host_type == BaseHost.TYPE_OSP:
-            return OSPHost()
+        if host_type == BaseHost.TYPE_OPENSTACK:
+            return OpenstackHost()
         if host_type == BaseHost.TYPE_OVIRT:
             return OvirtHost()
-        if host_type == BaseHost.TYPE_CNV:
-            return CNVHost()
+        if host_type == BaseHost.TYPE_KUBEVIRT:
+            return KubevirtHost()
         else:
             raise ValueError("Cannot build host of type: %r" % host_type)
 
@@ -97,11 +97,11 @@ class BaseHost(object):
         hard_error("Cannot validate data for unknown host type")
 
 
-class CNVHost(BaseHost):
-    TYPE = BaseHost.TYPE_CNV
+class KubevirtHost(BaseHost):
+    TYPE = BaseHost.TYPE_KUBEVIRT
 
     def __init__(self):
-        super(CNVHost, self).__init__()
+        super(KubevirtHost, self).__init__()
         self._k8s = K8SCommunicator()
         self._tag = '123'
 
@@ -243,8 +243,8 @@ class K8SCommunicator(object):
             c.close()
 
 
-class OSPHost(BaseHost):
-    TYPE = BaseHost.TYPE_OSP
+class OpenstackHost(BaseHost):
+    TYPE = BaseHost.TYPE_OPENSTACK
 
     def create_runner(self, *args, **kwargs):
         return SubprocessRunner(self, *args, **kwargs)
@@ -432,11 +432,11 @@ class OSPHost(BaseHost):
         else:
             vm = json.loads(vm)
             STATE.vm_id = str(vm.get('id'))
-            logging.info('Created OSP instance with id=%s', STATE.vm_id)
+            logging.info('Created Openstack instance with id=%s', STATE.vm_id)
             return True
 
     def check_install_drivers(self, data):
-        # Nothing to do for OSP
+        # Nothing to do for Openstack
         pass
 
     def prepare_command(self, data, v2v_args, v2v_env, v2v_caps):
@@ -486,10 +486,11 @@ class OSPHost(BaseHost):
         if data.get('insecure_connection', False):
             logging.info(
                 'SSL verification is disabled for OpenStack connections')
-        osp_arg_re = re.compile('os[-_]', re.IGNORECASE)
+        openstack_arg_re = re.compile('os[-_]', re.IGNORECASE)
         for k in data['osp_environment'].keys():
-            if not osp_arg_re.match(k[:3]):
-                hard_error('found invalid key in OSP environment: %s' % k)
+            if not openstack_arg_re.match(k[:3]):
+                hard_error('found invalid key in Openstack environment: %s'
+                           % k)
         if 'osp_guest_id' not in data:
             data['osp_guest_id'] = uuid.uuid4()
         if not isinstance(data['osp_security_groups_ids'], list):

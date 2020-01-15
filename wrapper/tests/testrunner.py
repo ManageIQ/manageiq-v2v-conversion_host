@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import unittest
 
-from test_osp import *  # NOQA
+from test_openstack import *  # NOQA
 from test_output_parser import *  # NOQA
 from test_ovirt import *  # NOQA
 from test_routines import *  # NOQA

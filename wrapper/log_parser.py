@@ -22,13 +22,13 @@ class OutputParser(object):
     VMDK_PATH_RE = re.compile(
         br'/vmfs/volumes/(?P<store>[^/]*)/(?P<vm>[^/]*)/'
         br'(?P<disk>.*?)(-flat)?\.vmdk$')
-    RHV_DISK_UUID = re.compile(br'disk\.id = \'(?P<uuid>[a-fA-F0-9-]*)\'')
-    RHV_VM_ID = re.compile(
+    OVIRT_DISK_UUID = re.compile(br'disk\.id = \'(?P<uuid>[a-fA-F0-9-]*)\'')
+    OVIRT_VM_ID = re.compile(
         br'<VirtualSystem ovf:id=\'(?P<uuid>[a-fA-F0-9-]*)\'>')
-    OSP_VOLUME_ID = re.compile(
+    OPENSTACK_VOLUME_ID = re.compile(
             br'openstack .*\'?volume\'? \'?show\'?.* '
             br'\'?(?P<uuid>[a-fA-F0-9-]*)\'?$')
-    OSP_VOLUME_PROPS = re.compile(
+    OPENSTACK_VOLUME_PROPS = re.compile(
         br'openstack .*\'?volume\'? \'?set.*'
         br'\'?--property\'?'
         br' \'?virt_v2v_disk_index=(?P<volume>[0-9]+)/[0-9]+.*'
@@ -109,7 +109,7 @@ class OutputParser(object):
             logging.info('Set VM display name to: %s',
                          STATE.internal['display_name'])
 
-        # SSH + RHV
+        # SSH + Ovirt
         m = self.OVERLAY_SOURCE_RE.match(line)
         if m is not None:
             path = m.group(1)
@@ -147,7 +147,7 @@ class OutputParser(object):
             else:
                 logging.debug('Skipping progress update for unknown disk')
 
-        m = self.RHV_DISK_UUID.match(line)
+        m = self.OVIRT_DISK_UUID.match(line)
         if m is not None:
             path = STATE.disks[self._current_disk].path
             disk_id = m.group('uuid')
@@ -155,15 +155,15 @@ class OutputParser(object):
             logging.debug('Path \'%s\' has disk id=\'%s\'', path, disk_id)
 
         # OpenStack volume UUID
-        m = self.OSP_VOLUME_ID.match(line)
+        m = self.OPENSTACK_VOLUME_ID.match(line)
         if m is not None:
             volume_id = m.group('uuid').decode('utf-8')
             ids = STATE.internal['disk_ids']
             ids[len(ids)+1] = volume_id
-            logging.debug('Adding OSP volume %s', volume_id)
+            logging.debug('Adding Openstack volume %s', volume_id)
 
         # OpenStack volume index
-        m = self.OSP_VOLUME_PROPS.match(line)
+        m = self.OPENSTACK_VOLUME_PROPS.match(line)
         if m is not None:
             volume_id = m.group('uuid').decode('utf-8')
             index = int(m.group('volume'))
@@ -172,8 +172,8 @@ class OutputParser(object):
                 logging.debug(
                     'Volume \'%s\' is NOT at index %d', volume_id, index)
 
-        # RHV VM UUID
-        m = self.RHV_VM_ID.search(line)
+        # Ovirt VM UUID
+        m = self.OVIRT_VM_ID.search(line)
         if m is not None:
             vm_id = m.group('uuid').decode('utf-8')
             STATE.vm_id = vm_id

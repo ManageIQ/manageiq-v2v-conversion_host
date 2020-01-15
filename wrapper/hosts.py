@@ -111,7 +111,7 @@ class KubevirtHost(BaseHost):
     def handle_finish(self, data):
         """ Handle finish after successfull conversion """
         # Store JSON into annotation
-        with open('/data/vm/{}.json'.format(data['vm_name']), 'rb') as f:
+        with open('/data/vm/%s.json' % data['vm_name'], 'rb') as f:
             vm_data = f.read().decode('utf-8')
             patch = [{
                 "op": "add",
@@ -190,17 +190,12 @@ class K8SCommunicator(object):
         with open(os.path.join(account_dir, 'token')) as f:
             self._token = f.read()
 
-        self._url = (
-            'https://{host}:{port}'
-            '/api/v1/namespaces/{ns}/pods/{pod}').format(
-                host=self._host,
-                port=self._port,
-                ns=self._ns,
-                pod=self._pod)
+        self._url = ('https://%s:%s/api/v1/namespaces/%s/pods/%s' %
+                     (self._host, self._port, self._ns, self._pod))
         # too early for logging
         # logging.info('Accessing Kubernetes on: %s', self._url)
         self._headers = [
-            'Authorization: Bearer {}'.format(self._token),
+            'Authorization: Bearer %s' % self._token,
             'Accept: application/json',
         ]
 

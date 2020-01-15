@@ -52,7 +52,7 @@ def prepare_command(data, v2v_caps, agent_sock=None):
         '-v', '-x',
         data['vm_name'],
         '--root', 'first',
-        '--machine-readable=file:{}'.format(STATE.machine_readable_log),
+        '--machine-readable=file:%s' % STATE.machine_readable_log,
     ]
 
     if data['transport_method'] == 'vddk':

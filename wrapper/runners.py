@@ -5,10 +5,9 @@ VIRT_V2V = '/usr/bin/virt-v2v'
 
 class BaseRunner(object):
 
-    def __init__(self, host, arguments, environment, log):
+    def __init__(self, arguments, environment, log):
         self._arguments = arguments
         self._environment = environment
-        self._host = host
         self._log = log
         self._pid = None
         self._return_code = None

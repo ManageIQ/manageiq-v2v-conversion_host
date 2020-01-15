@@ -15,7 +15,6 @@ from io import BytesIO
 from six.moves.urllib.parse import urlparse
 
 from .common import error, hard_error, log_command_safe
-from .runners import SubprocessRunner
 from .state import STATE
 
 
@@ -43,9 +42,6 @@ class _BaseHost(object):
         self._tag = '%s-%d' % (time.strftime('%Y%m%dT%H%M%S'), os.getpid())
 
     # Interface
-
-    def create_runner(self, *args, **kwargs):
-        raise NotImplementedError()
 
     def get_tag(self):
         return self._tag
@@ -91,9 +87,6 @@ class KubevirtHost(_BaseHost):
         # This could be stored in the host and just requested instead of the
         # class changing an external behaviour.
         STATE.internal['duplicate_logs'] = True
-
-    def create_runner(self, *args, **kwargs):
-        return SubprocessRunner(self, *args, **kwargs)
 
     def handle_finish(self, data):
         """ Handle finish after successfull conversion """
@@ -231,9 +224,6 @@ class _K8SCommunicator(object):
 
 
 class OpenstackHost(_BaseHost):
-
-    def create_runner(self, *args, **kwargs):
-        return SubprocessRunner(self, *args, **kwargs)
 
     def handle_cleanup(self, data):
         """ Handle cleanup after failed conversion """
@@ -586,9 +576,6 @@ class OvirtHost(_BaseHost):
         finally:
             if connection is not None:
                 connection.close()
-
-    def create_runner(self, *args, **kwargs):
-        return SubprocessRunner(self, *args, **kwargs)
 
     def handle_cleanup(self, data):
         with self.sdk_connection(data) as conn:

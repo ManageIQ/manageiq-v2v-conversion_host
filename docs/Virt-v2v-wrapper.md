@@ -67,18 +67,8 @@ Miscellaneous:
    specified, it is used to connect the VM's NICs to the destination networks
    during the conversion using virt-v2v `--bridge` option.
 
-* `virtio_win`: optional key containing path to virtio-win ISO image; this is
-  useful for installing Windows drivers to the VM during conversion. It may be
-  either absolute path or only a filename in which case path to ISO domain is
-  auto-detected.
-
 * `install_drivers`: optional key whether to install Windows drivers during
-  conversion, default is `false`. If `install_drivers` is `true` and
-  `virtio_win` is not specified, wrapper attempts to automatically select best
-  ISO from the ISO domain. Note that when no ISO is found this does not lead to
-  failed conversion. Just no drivers will be installed in this case. This is
-  different from situation when `virtio_win` is specified but points to
-  non-existing ISO, which is an error.
+  conversion, default is `false`.
 
 * `allocation`: optional key specifying the allocation type to use; possible
   values are `preallocated` and `sparse`.
@@ -86,45 +76,11 @@ Miscellaneous:
 * `luks_keys_vault`: optional key to specify a JSON file containing the LUKS
   keys for encrypted devices (see below).
 
-Example:
-
-    {
-        "export_domain": "storage1.example.com:/data/export-domain",
-        "vm_name": "My_Machine",
-
-        "transport_method": "vddk",
-        "vmware_fingerprint": "1A:3F:26:C6:DC:2C:44:88:AA:33:81:3C:18:6E:5D:9F:C0:EE:DF:5C",
-        "vmware_uri": "esx://root@10.2.0.20?no_verify=1",
-        "vmware_password": "secret-password",
-
-        "source_disks": [
-            "[dataStore_1] My_Machine/My_Machine_1.vmdk",
-            "[dataStore_1] My_Machine/My_Machine_2.vmdk"
-        ],
-        "network_mappings": [
-            {
-                "source": "networkA1",
-                "destination": "networkA2"
-            },
-            {
-                "source": "networkX1",
-                "destination": "networkX2"
-            }
-        ],
-        "virtio_win": "virtio-win-0.1.141.iso",
-        "luks_keys_vault": "/path_to/luks_key_vault.json"
-    }
-
 ## Output configuration
 
 There is no configuration key specifying the type of output. Rather the output
-method is chosen depending on the keys present. If there are keys defining
-multiple output modes the first one is selected base on the order of
-precedence. The order is following:
-
-1)  oVirt API upload
-
-2)  export domain
+method is chosen depending on the keys present. The only supported output mode
+is oVirt API upload.
 
 ### oVirt API upload
 
@@ -140,27 +96,42 @@ with `rhv_url` some other keys need to be also specified.
 * `rhv_storage`: name of the target storage domain
 
 * `insecure_connection`: optional, whether to verify peer certificates. For now
-  used only when connecting to oVirt/RHV. Default is `false`.
+  used only when connecting to oVirt/RHV. Default is `false`. The default path
+  for the CA certificates file is
+  `/etc/pki/ca-trust/source/anchors/v2v-conversion-host-ca-bundle.pem`.
 
 Example:
 
     {
-        ...
+        "vm_name": "My_Machine",
+
+        "transport_method": "vddk",
+        "vmware_fingerprint": "1A:3F:26:C6:DC:2C:44:88:AA:33:81:3C:18:6E:5D:9F:C0:EE:DF:5C",
+        "vmware_uri": "esx://root@10.2.0.20?no_verify=1",
+        "vmware_password": "secret-password",
+
         "rhv_url": "https://ovirt.example.com/ovirt-engine/api",
         "rhv_password": "secret-password",
         "rhv_cluster": "Default",
         "rhv_storage": "data",
         "insecure_connection": true
+
+        "source_disks": [
+            "[dataStore_1] My_Machine/My_Machine_1.vmdk",
+            "[dataStore_1] My_Machine/My_Machine_2.vmdk"
+        ],
+        "network_mappings": [
+            {
+                "source": "networkA1",
+                "destination": "networkA2"
+            },
+            {
+                "source": "networkX1",
+                "destination": "networkX2"
+            }
+        ],
+        "luks_keys_vault": "/path_to/luks_key_vault.json"
     }
-
-
-### Export domain
-
-To request conversion into export domain add the following key to the
-configuration:
-
-* `export_domain`: specify path to NFS share in the format `<hostname>:<path>`
-
 
 ## State File Format
 

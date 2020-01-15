@@ -20,9 +20,10 @@ def check_ovirt_version():
             rpmUtils.miscutils.stringToVersion(VDSM_MIN_VERSION))
         if res >= 0:
             return True
-        print('Version of VDSM on the host: {}{}'.format(
-                '' if vdsm['epoch'] is None else '%s:' % vdsm['epoch'],
-                vdsm['version']))
+        if vdsm['epoch'] is None:
+            vdsm['epoch'] = ''
+        print('Version of VDSM on the host: %s%s' %
+              (vdsm['epoch'], vdsm['version']))
     print('Minimal required oVirt/RHV version is %s' % VDSM_MIN_OVIRT)
     return False
 

@@ -52,7 +52,7 @@ def prepare_command(data, v2v_caps, agent_sock=None):
     v2v_args = [
         '-v', '-x',
         '--root', 'first',
-        '--machine-readable=file:{}'.format(STATE.machine_readable_log),
+        '--machine-readable=file:%s' % STATE.machine_readable_log,
     ]
 
     if STATE.pre_copy:

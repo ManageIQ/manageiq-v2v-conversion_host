@@ -695,6 +695,12 @@ class OvirtHost(_BaseHost):
 
         if 'rhv_url' in data:
             with self.sdk_connection(data) as c:
+                vm_svc = c.system_service().vms_service()
+                vms = vm_svc.list(search='name=' + data['vm_name'])
+                if len(vms) > 0:
+                    hard_error('VM with the name "%s" already exists on the '
+                               'destination' % data['vm_name'])
+
                 if 'allocation' not in data:
                     # Check storage domain type and decide on suitable
                     # allocation type Note: This is only temporary. We should

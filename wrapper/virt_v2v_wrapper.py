@@ -169,7 +169,7 @@ def spawn_ssh_agent(data, uid, gid):
         error('Failed to start ssh-agent', exception=True)
         logging.error('Command failed with: %s', e.output)
         return None, None
-    logging.debug('ssh-agent: %s' % out)
+    logging.debug('ssh-agent: %s', out)
     sock = re.search(br'^SSH_AUTH_SOCK=([^;]+);', out, re.MULTILINE)
     pid = re.search(br'^echo Agent pid ([0-9]+);', out, re.MULTILINE)
     if not sock or not pid:
@@ -273,7 +273,7 @@ def main():
     virt_v2v_caps = virt_v2v_capabilities()
     if virt_v2v_caps is None:
         hard_error('Could not get virt-v2v capabilities.')
-    logging.debug("virt-v2v capabilities: %r" % virt_v2v_caps)
+    logging.debug("virt-v2v capabilities: %r", virt_v2v_caps)
 
     try:
 

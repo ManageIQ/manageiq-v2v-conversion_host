@@ -260,6 +260,11 @@ def main():
         filename=wrapper_log,
         format=log_format)
 
+    if STATE.internal['duplicate_logs']:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(LOG_LEVEL)
+        handler.setFormatter(logging.Formatter(log_format))
+
     logging.info('Wrapper version %s, uid=%d', VERSION, os.getuid())
 
     logging.info('Will store virt-v2v log in: %s', STATE.v2v_log)
@@ -375,13 +380,6 @@ def main():
         }))
 
         # Let's get to work
-        handler = logging.StreamHandler(sys.stdout)
-        handler.setLevel(logging.DEBUG)
-        # TODO: drop junk from virt-v2v log
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        logging.getLogger().addHandler(handler)
         agent_pid = None
         agent_sock = None
         if data['transport_method'] == 'ssh':

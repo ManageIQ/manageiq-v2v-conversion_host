@@ -280,45 +280,9 @@ def main():
         hard_error('Could not get virt-v2v capabilities.')
     logging.debug("virt-v2v capabilities: %r" % virt_v2v_caps)
 
+    validate_data(host, data)
+
     try:
-
-        # Make sure all the needed keys are in data. This is rather poor
-        # validation, but...
-        if 'vm_name' not in data:
-            hard_error('Missing vm_name')
-
-        # Transports (only VDDK for now)
-        if 'transport_method' not in data:
-            hard_error('No transport method specified')
-        if data['transport_method'] not in ('ssh', 'vddk'):
-            hard_error('Unknown transport method: %s' %
-                       data['transport_method'])
-
-        if data['transport_method'] == 'vddk':
-            for k in [
-                    'vmware_fingerprint',
-                    'vmware_uri',
-                    'vmware_password',
-                    ]:
-                if k not in data:
-                    hard_error('Missing argument: %s' % k)
-
-        # Network mappings
-        if 'network_mappings' in data:
-            if not isinstance(data['network_mappings'], list):
-                hard_error('"network_mappings" must be an array')
-
-            for mapping in data['network_mappings']:
-                if not all(
-                        k in mapping for k in ("source", "destination")):
-                    hard_error('Both "source" and "destination"'
-                               ' must be provided in network mapping')
-        else:
-            data['network_mappings'] = []
-
-        # Method dependent validation
-        data = host.validate_data(data)
-
         #
         # NOTE: don't use hard_error() beyond this point!
         #
@@ -408,6 +372,43 @@ def main():
     logging.info('Finished')
     if STATE.failed:
         sys.exit(2)
+
+
+def validate_data(host, data):
+    # Make sure all the needed keys are in data. This is rather poor
+    # validation, but...
+    if 'vm_name' not in data:
+        hard_error('Missing vm_name')
+
+    # Transports (only VDDK for now)
+    if 'transport_method' not in data:
+        hard_error('No transport method specified')
+    if data['transport_method'] not in ('ssh', 'vddk'):
+        hard_error('Unknown transport method: %s' %
+                   data['transport_method'])
+
+    if data['transport_method'] == 'vddk':
+        for k in [
+                'vmware_fingerprint',
+                'vmware_uri',
+                'vmware_password',
+                ]:
+            if k not in data:
+                hard_error('Missing argument: %s' % k)
+
+    # Network mappings
+    if 'network_mappings' in data:
+        if not isinstance(data['network_mappings'], list):
+            hard_error('"network_mappings" must be an array')
+
+        for mapping in data['network_mappings']:
+            if not all(k in mapping for k in ("source", "destination")):
+                hard_error('Both "source" and "destination"'
+                           ' must be provided in network mapping')
+    else:
+        data['network_mappings'] = []
+
+    data = host.validate_data(data)
 
 
 def finish(host, data, password_files):

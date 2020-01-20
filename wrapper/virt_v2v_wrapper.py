@@ -147,10 +147,10 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
     STATE.write()
 
 
-def write_password(password, password_files, uid, gid):
+def write_password(password, password_files, host):
     pfile = tempfile.mkstemp(suffix='.v2v')
     password_files.append(pfile[1])
-    os.fchown(pfile[0], uid, gid)
+    os.fchown(pfile[0], host.get_uid(), host.get_gid())
     os.write(pfile[0], bytes(password.encode('utf-8')))
     os.close(pfile[0])
     return pfile[1]
@@ -321,17 +321,15 @@ def main():
         if 'vmware_password' in data:
             data['vmware_password_file'] = write_password(
                     data['vmware_password'], password_files,
-                    host.get_uid(), host.get_gid())
+                    host)
         if 'rhv_password' in data:
             data['rhv_password_file'] = write_password(data['rhv_password'],
                                                        password_files,
-                                                       host.get_uid(),
-                                                       host.get_gid())
+                                                       host)
         if 'ssh_key' in data:
             data['ssh_key_file'] = write_password(data['ssh_key'],
                                                   password_files,
-                                                  host.get_uid(),
-                                                  host.get_gid())
+                                                  host)
 
         if 'luks_keys_vault' not in data:
             data['luks_keys_vault'] = os.path.join(
@@ -356,8 +354,7 @@ def main():
                         'device': luks_key['device'],
                         'filename': write_password(luks_key['key'],
                                                    password_files,
-                                                   host.get_uid(),
-                                                   host.get_gid())
+                                                   host)
                     })
 
         try:

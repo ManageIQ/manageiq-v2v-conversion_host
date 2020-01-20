@@ -725,5 +725,3 @@ class OvirtHost(_BaseHost):
                         data['allocation'] = 'preallocated'
                     logging.info('... selected allocation type is %s',
                                  data['allocation'])
-
-        return data

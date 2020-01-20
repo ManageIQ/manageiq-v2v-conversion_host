@@ -408,7 +408,7 @@ def validate_data(host, data):
     else:
         data['network_mappings'] = []
 
-    data = host.validate_data(data)
+    host.validate_data(data)
 
 
 def finish(host, data, password_files):

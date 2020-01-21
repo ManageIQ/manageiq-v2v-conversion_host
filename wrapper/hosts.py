@@ -626,7 +626,7 @@ class OvirtHost(_BaseHost):
             # Avoid checking timeouts, and waiting, if there are no
             # more disks to remove
             if len(disk_ids) > 0:
-                if time.time() > endt:
+                if endt < time.time():
                     logging.error('Timed out waiting for disks: %r',
                                   disk_ids)
                     break

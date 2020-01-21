@@ -251,14 +251,14 @@ def main():
     # Otherwise we would have two logs.
     STATE.v2v_log = os.path.join(LOG_DIR, 'virt-v2v.log')
     STATE.machine_readable_log = os.path.join(LOG_DIR, 'virt-v2v-mr.log')
-    wrapper_log = os.path.join(LOG_DIR, 'virt-v2v-wrapper.log')
+    STATE.wrapper_log = os.path.join(LOG_DIR, 'virt-v2v-wrapper.log')
     STATE.state_file = os.path.join(RUN_DIR, 'state.json')
 
     log_format = '%(asctime)s:%(levelname)s:' \
         + ' %(message)s (%(module)s:%(lineno)d)'
     logging.basicConfig(
         level=LOG_LEVEL,
-        filename=wrapper_log,
+        filename=STATE.wrapper_log,
         format=log_format)
 
     if STATE.internal['duplicate_logs']:
@@ -376,7 +376,7 @@ def main():
         # Send some useful info on stdout in JSON
         print(json.dumps({
             'v2v_log': STATE.v2v_log,
-            'wrapper_log': wrapper_log,
+            'wrapper_log': STATE.wrapper_log,
             'state_file': STATE.state_file,
         }))
 

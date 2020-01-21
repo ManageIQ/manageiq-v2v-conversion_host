@@ -54,6 +54,7 @@ class _State(StateObject):
         'state_file',
         'v2v_log',
         'machine_readable_log',
+        'wrapper_log',
 
         # These fields are written to the state file
         'disk_count',
@@ -72,6 +73,7 @@ class _State(StateObject):
         'state_file',
         'v2v_log',
         'machine_readable_log',
+        'wrapper_log',
     ]
 
     def __init__(self):
@@ -101,6 +103,7 @@ class _State(StateObject):
         self.started = None
         self.return_code = None
         self.vm_id = None
+        self.wrapper_log = None
 
     def write(self):
         tmp_state = tempfile.mkstemp(suffix='.v2v.state',

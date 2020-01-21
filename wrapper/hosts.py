@@ -52,7 +52,7 @@ class _BaseHost(object):
 
     def handle_finish(self, data):
         """ Handle finish after successfull conversion """
-        return True
+        pass
 
     def check_install_drivers(self, data):
         hard_error('cannot check_install_drivers for unknown host type')
@@ -99,7 +99,6 @@ class KubevirtHost(_BaseHost):
                 "value": vm_data,
             }]
             self._k8s.patch(json.dumps(patch))
-        return True
 
     def check_install_drivers(self, data):
         # Nothing to do for Kubevirt
@@ -287,21 +286,24 @@ class OpenstackHost(_BaseHost):
 
         # Init keystone
         if self._run_openstack(['token', 'issue'], data) is None:
+            STATE.failed = True
             error('Create VM failed')
-            return False
+            return
         volumes = []
         # Build volume list
         for k in sorted(STATE.internal['disk_ids'].keys()):
             volumes.append(STATE.internal['disk_ids'][k])
         if len(volumes) == 0:
+            STATE.failed = True
             error('No volumes found!')
-            return False
+            return
         if len(volumes) != len(STATE.internal['disk_ids']):
+            STATE.failed = True
             error('Detected duplicate indices of Cinder volumes')
             logging.debug('Source volume map: %r',
                           STATE.internal['disk_ids'])
             logging.debug('Assumed volume list: %r', volumes)
-            return False
+            return
         for vol in volumes:
             logging.info('Transferring volume: %s', vol)
             # Checking if volume is in available state
@@ -312,8 +314,9 @@ class OpenstackHost(_BaseHost):
                         'volume', 'show', '-f', 'value', '-c', 'status', vol,
                         ], data)
                 if volume_state is None:
+                    STATE.failed = True
                     error('Unable to get volume state, quitting.')
-                    return False
+                    return
                 volume_state = volume_state.rstrip()
                 logging.info('Current volume state: %s.', volume_state)
                 if volume_state == 'available':
@@ -324,11 +327,12 @@ class OpenstackHost(_BaseHost):
                     break
                 time.sleep(20)
             if not is_available:
+                STATE.failed = True
                 error(
                     'Volume did not get ready (available) '
                     'for transfer within %s seconds.',
                     TIMEOUT)
-                return False
+                return
             # Move volumes to the destination project
             transfer = self._run_openstack([
                 'volume', 'transfer', 'request', 'create',
@@ -336,8 +340,9 @@ class OpenstackHost(_BaseHost):
                 vol,
                 ], data)
             if transfer is None:
+                STATE.failed = True
                 error('Failed to transfer volume')
-                return False
+                return
             transfer = json.loads(transfer)
             self._run_openstack([
                 'volume', 'transfer', 'request', 'accept',
@@ -377,8 +382,9 @@ class OpenstackHost(_BaseHost):
                 port_cmd.extend(['--security-group', grp])
             port = self._run_openstack(port_cmd, data, destination=True)
             if port is None:
+                STATE.failed = True
                 error('Failed to create port')
-                return False
+                return
             port = json.loads(port)
             logging.info('Created port id=%s', port['id'])
             ports.append(port['id'])
@@ -403,13 +409,15 @@ class OpenstackHost(_BaseHost):
         # Let's get rolling...
         vm = self._run_openstack(os_command, data, destination=True)
         if vm is None:
+            STATE.failed = True
             error('Create VM failed')
-            return False
+            return
         else:
             vm = json.loads(vm)
             STATE.vm_id = str(vm.get('id'))
+            STATE.write()
             logging.info('Created Openstack instance with id=%s', STATE.vm_id)
-            return True
+            return
 
     def check_install_drivers(self, data):
         # Nothing to do for Openstack

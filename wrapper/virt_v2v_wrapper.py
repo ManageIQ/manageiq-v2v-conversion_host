@@ -259,6 +259,7 @@ def main():
     logging.basicConfig(
         level=LOG_LEVEL,
         filename=STATE.wrapper_log,
+        filemode='a',
         format=log_format)
 
     if STATE.internal['duplicate_logs']:

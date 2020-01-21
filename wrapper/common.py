@@ -119,3 +119,7 @@ def add_perms_to_file(path, modes, uid=-1, gid=-1):
     logging.debug('Changing permissions on "%s" from 0%o to 0%o',
                   path, cur_mode, new_mode)
     os.chmod(path, new_mode)
+
+
+def nbd_uri_from_unix_socket(sock_path):
+    return 'nbd+unix:///?socket=%s' % sock_path

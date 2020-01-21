@@ -3,6 +3,8 @@ language: python
 python:
   - "3.6"
   - "3.7"
+  - "3.8"
+  - "3.9-dev"
 
 ## TODO: Uncomment this when kubevirt tests are added
 # sudo: required

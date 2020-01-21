@@ -8,6 +8,10 @@ import sys
 from .state import STATE
 
 
+RUN_DIR = '/var/lib/uci'
+LOG_DIR = '/var/log/uci'
+
+
 def atexit_command(cmd):
     """
     Run command ignoring any errors. This is supposed to be used with atexit.

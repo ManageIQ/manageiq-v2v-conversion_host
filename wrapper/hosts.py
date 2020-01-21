@@ -1,20 +1,23 @@
 # pylint: disable=too-many-lines
+import datetime
 import json
 import logging
 import os
 import pycurl
 import re
 import six
+import stat
 import subprocess
 import sys
 import time
 import uuid
 
+from collections import namedtuple
 from contextlib import contextmanager
 from io import BytesIO
 from six.moves.urllib.parse import urlparse
 
-from .common import error, hard_error, log_command_safe
+from .common import error, hard_error, log_command_safe, add_perms_to_file
 from .state import STATE
 
 
@@ -556,6 +559,11 @@ class OpenstackHost(_BaseHost):
             return None
 
 
+OvirtDisk = namedtuple('OvirtDisk', ['id', 'index'])
+OvirtDiskAttachment = namedtuple('OvirtDiskAttachment', ['disk_id',
+                                                         'attachment_id'])
+
+
 class OvirtHost(_BaseHost):
     """ Encapsulates data and methods specific to oVirt/RHV environment """
 
@@ -577,6 +585,10 @@ class OvirtHost(_BaseHost):
             self.sdk.types.StorageType.ISCSI,
             self.sdk.types.StorageType.POSIXFS,
             )
+        self._conversion_vm = None
+        self._vm_name = None
+        self._created_disks = []
+        self._attached_disks = []
 
     @contextmanager
     def sdk_connection(self, data):
@@ -599,31 +611,240 @@ class OvirtHost(_BaseHost):
             if connection is not None:
                 connection.close()
 
+    def _get_vm(self, system_service, vm_name):
+        vms = system_service.vms_service().list(search='name="%s"' % vm_name)
+        if len(vms) > 1:
+            raise RuntimeError('Multiple VMs found after conversion')
+        if len(vms) != 1:
+            return None
+        return vms[0]
+
+    def _wait_for_ovirt_disks(self, disks_service):
+        endt = time.time() + TIMEOUT
+        wait_for_disks = self._created_disks[:]
+        while wait_for_disks:
+            for disk in wait_for_disks[:]:
+                st = disks_service.disk_service(disk.id).get().status
+                if st == self.sdk.types.DiskStatus.OK:
+                    wait_for_disks.remove(disk)
+                    STATE.pre_copy.disks[disk.index].status = 'Created'
+                    STATE.write()
+
+            if wait_for_disks:
+                if endt < time.time():
+                    raise RuntimeError('Timed out waiting for disks '
+                                       'to become unlocked')
+                time.sleep(1)
+
+    def _wait_for_local_disks(self, paths):
+        logging.debug('Waiting for all disks to get plugged/noticed')
+        wait_for_paths = paths[:]
+        endt = time.time() + TIMEOUT
+        while wait_for_paths:
+            for path in wait_for_paths[:]:
+                if os.path.exists(path):
+                    wait_for_paths.remove(path)
+            if wait_for_paths:
+                if endt < time.time():
+                    raise RuntimeError('Timed out waiting for disks '
+                                       'to get plugged/noticed')
+                time.sleep(1)
+
+        for path in paths:
+            add_perms_to_file(path,
+                              stat.S_IRGRP | stat.S_IWGRP,
+                              -1, self.get_gid())
+
+    def _create_disks(self, disks_service, data):
+        if not STATE.pre_copy.disks:
+            RuntimeError('Looks like no disks were detected')
+
+        if data['output_format'] == 'raw':
+            disk_format = self.sdk.types.DiskFormat.RAW
+        elif data['output_format'] == 'qcow2':
+            disk_format = self.sdk.types.DiskFormat.COW
+
+        for i, pc_disk in enumerate(STATE.pre_copy.disks):
+            dt = datetime.datetime.now(datetime.timezone.utc).ctime()
+            name = '%s_Disk%d' % (data['vm_name'], i)
+            logging.debug('Creating disk #%d: "%s"', i, name)
+            disk = self.sdk.types.Disk(
+                name=name,
+                description='Converted from VMware on %s' % dt,
+                format=disk_format,
+                initial_size=pc_disk.size,
+                provisioned_size=pc_disk.size,
+                sparse=data['allocation'] == 'sparse',
+                shareable=True,
+                storage_domains=[
+                    self.sdk.types.StorageDomain(name=data['rhv_storage'])
+                ])
+            pc_disk.status = 'Creating'
+            STATE.write()
+            disk = disks_service.add(disk)
+            disk = disks_service.disk_service(disk.id)
+            # Adding it here so that it gets tried to be cleaned up even if
+            # the timeout is reached
+            d = disk.get()
+            self._created_disks.append(OvirtDisk(d.id, i))
+
+        self._wait_for_ovirt_disks(disks_service)
+
+    def _remove_disks(self, system_service):
+        disks_service = system_service.disks_service()
+        self._delete_disks(disks_service, [d.id for d in self._created_disks])
+
+    def _attach_disks(self, system_service):
+        paths = []
+        arguments = dict(active=True,
+                         bootable=False,
+                         interface=self.sdk.types.DiskInterface.VIRTIO)
+        arguments['vm'] = self._conversion_vm
+        arguments['description'] = ('Temporary attachment for pre_copy '
+                                    'of VM %s' % self._vm_name)
+
+        vm_svc = system_service.vms_service().vm_service(arguments['vm'].id)
+        das = vm_svc.disk_attachments_service()
+
+        disks_service = system_service.disks_service()
+        ndisks = len(self._created_disks)
+        for i, v in enumerate(self._created_disks):
+            logging.debug('Attaching disk %d/%d to the conversion VM',
+                          i, ndisks)
+            kwargs = arguments.copy()
+            kwargs['disk'] = disks_service.disk_service(v.id).get()
+            disk_att = das.add(self.sdk.types.DiskAttachment(**kwargs))
+            self._attached_disks.append(disk_att)
+            local_path = '/dev/disk/by-id/virtio-%s' % disk_att.id[:20]
+            STATE.pre_copy.disks[v.index].local_path = local_path
+            paths.append(local_path)
+
+        self._wait_for_local_disks(paths)
+
+    def _update_disks(self, conn):
+        if STATE.vm_id is None:
+            STATE.failed = True
+            error("No vm_id parsed from virt-v2v output")
+            return
+
+        vms_service = conn.system_service().vms_service()
+        vm = vms_service.vm_service(STATE.vm_id)
+        das = vm.disk_attachments_service()
+        for i, att in enumerate(das.list()):
+            logging.debug('Updating shareable state of disk #%d', i)
+            disk = conn.follow_link(att.disk)
+            att.disk = disk
+            att.disk.shareable = False
+            das.attachment_service(att.id).update(att)
+
+    def _detach_disks(self, system_service, vm):
+        vms = system_service.vms_service().vm_service(vm.id)
+        das = vms.disk_attachments_service()
+        # Let's keep the list of attached disks, so that we can unplug it from
+        # both VMs in case of an error
+        disks = self._attached_disks[:]
+        for att in disks:
+            da = das.attachment_service(att.id)
+
+            logging.debug('Deactivating disk attachment id=%s' % att.id)
+            da.update(self.sdk.types.DiskAttachment(active=False))
+
+        endt = time.time() + TIMEOUT
+        while len(disks) > 0:
+            for att in disks[:]:
+                da = das.attachment_service(att.id).get()
+                if not da.active:
+                    disks.remove(att)
+
+            if len(disks) > 0:
+                if endt < time.time():
+                    logging.error('Timed out waiting for deactivation of '
+                                  'disk attachments: %r', disks)
+                    break
+                time.sleep(1)
+
+        disks = self._attached_disks[:]
+        for att in disks:
+            da = das.attachment_service(att.id)
+
+            logging.debug('Deactivating disk attachment id=%s' % att.id)
+            da.remove()
+
+        endt = time.time() + TIMEOUT
+        while len(disks) > 0:
+            for att in disks[:]:
+                da = das.attachment_service(att.id)
+                try:
+                    da.get()
+                except self.sdk.NotFoundError:
+                    disks.remove(att)
+
+            if len(disks) > 0:
+                if endt < time.time():
+                    logging.error('Timed out waiting for removal of '
+                                  'disk attachments: %r', disks)
+                    break
+                time.sleep(1)
+
+        if len(disks) > 0:
+            STATE.failed = True
+            error('Timed out waiting for attachments: %s' % disks)
+
+    def prepare_disks(self, data):
+        with self.sdk_connection(data) as conn:
+            system_service = conn.system_service()
+            disks_service = system_service.disks_service()
+            self._create_disks(disks_service, data)
+            self._attach_disks(system_service)
+
     def handle_cleanup(self, data):
         with self.sdk_connection(data) as conn:
-            disks_service = conn.system_service().disks_service()
-            transfers_service = conn.system_service().image_transfers_service()
-            disk_ids = list(STATE.internal['disk_ids'].values())
-            # First stop all active transfers...
-            try:
-                transfers = transfers_service.list()
-                transfers = [t for t in transfers if t.image.id in disk_ids]
-                if len(transfers) == 0:
-                    logging.debug('No active transfers to cancel')
-                for transfer in transfers:
-                    logging.info('Canceling transfer id=%s for disk=%s',
-                                 transfer.id, transfer.image.id)
-                    transfer_service = \
-                        transfers_service.image_transfer_service(
-                            transfer.id)
-                    transfer_service.cancel()
-                    # The incomplete disk will be removed automatically
-                    disk_ids.remove(transfer.image.id)
-            except self.sdk.Error:
-                logging.exception('Failed to cancel transfers')
+            system_service = conn.system_service()
+            # We could probably just clean up everything no matter whether it's
+            # two phase or not.
+            if data['two_phase']:
+                self._handle_twophase_cleanup(system_service, data)
+            else:
+                self._handle_simple_cleanup(system_service, data)
 
-            # ... then delete the uploaded disks
-            self._delete_disks(disks_service, disk_ids)
+    def handle_finish(self, data):
+        if data['two_phase']:
+            with self.sdk_connection(data) as conn:
+                system_service = conn.system_service()
+                self._detach_disks(system_service, self._conversion_vm)
+                self._update_disks(conn)
+
+    def _handle_twophase_cleanup(self, system_service, data):
+        self._detach_disks(system_service, self._conversion_vm)
+        if STATE.vm_id:
+            vm = system_service.vms_service().vm_service(STATE.vm_id)
+            self._detach_disks(system_service, vm.get())
+            vm.remove()
+        self._remove_disks(system_service)
+
+    def _handle_simple_cleanup(self, system_service, data):
+        transfers_service = system_service.image_transfers_service()
+        disk_ids = list(STATE.internal['disk_ids'].values())
+        # First stop all active transfers...
+        try:
+            transfers = transfers_service.list()
+            transfers = [t for t in transfers if t.image.id in disk_ids]
+            if len(transfers) == 0:
+                logging.debug('No active transfers to cancel')
+            for transfer in transfers:
+                logging.info('Canceling transfer id=%s for disk=%s',
+                             transfer.id, transfer.image.id)
+                transfer_service = \
+                    transfers_service.image_transfer_service(
+                        transfer.id)
+                transfer_service.cancel()
+                # The incomplete disk will be removed automatically
+                disk_ids.remove(transfer.image.id)
+        except self.sdk.Error:
+            logging.exception('Failed to cancel transfers')
+
+        # ... then delete the uploaded disks
+        self._delete_disks(system_service.disks_service(), disk_ids)
 
     def _delete_disks(self, disks_service, disk_ids):
         logging.info('Removing disks: %r', disk_ids)
@@ -658,6 +879,10 @@ class OvirtHost(_BaseHost):
         output_format = data['output_format']
         allocation = data.get('allocation')
 
+        if STATE.pre_copy is not None:
+            output_format = 'raw'
+            allocation = 'sparse'
+
         v2v_args.extend([
             '--bridge', 'ovirtmgmt',
             '-of', output_format,
@@ -680,6 +905,9 @@ class OvirtHost(_BaseHost):
                 '-oo', 'rhv-direct',
                 '-oo', 'rhv-verifypeer=%s' % verifypeer,
                 ])
+            if STATE.pre_copy is not None:
+                for disk in self._created_disks:
+                    v2v_args.extend(['-oo', 'rhv-disk-uuid=' + disk.id])
 
         return v2v_args, v2v_env
 
@@ -721,8 +949,9 @@ class OvirtHost(_BaseHost):
             hard_error('No target specified')
 
         if data['two_phase']:
-            hard_error('Two-phase conversion is not supported for '
-                       'Ovirt host')
+            if 'rhv_url' not in data:
+                hard_error('Two-phase conversion is '
+                           'only supported with "rhv_url"')
 
         if 'rhv_url' in data:
             with self.sdk_connection(data) as c:
@@ -751,3 +980,27 @@ class OvirtHost(_BaseHost):
                         data['allocation'] = 'preallocated'
                     logging.info('... selected allocation type is %s',
                                  data['allocation'])
+
+                # We cannot reliably check that we are running on a VM with the
+                # specified UUID in `conversion_host_uuid` (otherwise we would
+                # not need the ID in the input in the first place), but we can
+                # at least fail early if the machine does not exist or if it is
+                # not up.
+                if data['two_phase']:
+                    try:
+                        vm_uuid = str(data['conversion_host_uuid'])
+                        vm = vm_svc.vm_service(vm_uuid)
+                        vm = vm.get()
+                        if vm.status != self.sdk.types.VmStatus.UP:
+                            hard_error('VM %s is not running,\n'
+                                       'how can this script be running on '
+                                       'a machine that is not up?' %
+                                       data['conversion_host_uuid'])
+                    except self.sdk.NotFoundError:
+                        hard_error('VM %s not found,\n'
+                                   'how can this script be running on a '
+                                   'machine that does not exist?' %
+                                   data['conversion_host_uuid'])
+                    self._conversion_vm = vm
+
+        self._vm_name = data['vm_name']

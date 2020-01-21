@@ -609,21 +609,20 @@ class OvirtHost(_BaseHost):
         while len(disk_ids) > 0:
             for disk_id in disk_ids[:]:
                 try:
-                    disk_service = disks_service.disk_service(disk_id)
+                    disk_service = disks_service.disk_service(str(disk_id))
                     disk = disk_service.get()
                     if disk.status != self.sdk.types.DiskStatus.OK:
                         continue
                     logging.info('Removing disk id=%s', disk_id)
                     disk_service.remove()
-                    disk_ids.remove(disk_id)
                 except self.sdk.NotFoundError:
                     logging.info('Disk id=%s does not exist (already '
                                  'removed?), skipping it',
                                  disk_id)
-                    disk_ids.remove(disk_id)
                 except self.sdk.Error:
                     logging.exception('Failed to remove disk id=%s',
                                       disk_id)
+                disk_ids.remove(disk_id)
             # Avoid checking timeouts, and waiting, if there are no
             # more disks to remove
             if len(disk_ids) > 0:

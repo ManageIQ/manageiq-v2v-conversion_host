@@ -298,14 +298,14 @@ def main():
 
         # Network mappings
         if 'network_mappings' in data:
-            if isinstance(data['network_mappings'], list):
-                for mapping in data['network_mappings']:
-                    if not all(
-                            k in mapping for k in ("source", "destination")):
-                        hard_error('Both "source" and "destination"'
-                                   ' must be provided in network mapping')
-            else:
+            if not isinstance(data['network_mappings'], list):
                 hard_error('"network_mappings" must be an array')
+
+            for mapping in data['network_mappings']:
+                if not all(
+                        k in mapping for k in ("source", "destination")):
+                    hard_error('Both "source" and "destination"'
+                               ' must be provided in network mapping')
         else:
             data['network_mappings'] = []
 

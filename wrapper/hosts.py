@@ -633,13 +633,16 @@ class OvirtHost(_BaseHost):
                 time.sleep(1)
 
     def prepare_command(self, data, v2v_args, v2v_env, v2v_caps):
+        output_format = data['output_format']
+        allocation = data.get('allocation')
+
         v2v_args.extend([
             '--bridge', 'ovirtmgmt',
-            '-of', data['output_format'],
+            '-of', output_format,
             ])
-        if 'allocation' in data:
+        if allocation is not None:
             v2v_args.extend([
-                '-oa', data['allocation']
+                '-oa', allocation
                 ])
 
         if 'rhv_url' in data:

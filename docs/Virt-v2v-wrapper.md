@@ -76,6 +76,12 @@ Miscellaneous:
 * `luks_keys_vault`: optional key to specify a JSON file containing the LUKS
   keys for encrypted devices (see below).
 
+Debugging:
+
+All keys in this section are subject to change without notice and should not be relied upon.  They exist *only* for debugging.
+
+* `rhv_debug`: optional key to enable debugging of `ovirtsdk4` API calls.
+
 ## Output configuration
 
 There is no configuration key specifying the type of output. Rather the output

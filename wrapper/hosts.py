@@ -578,6 +578,7 @@ class OvirtHost(_BaseHost):
                 username=str(username),
                 password=str(data['rhv_password']),
                 log=logging.getLogger(),
+                debug=data.get('rhv_debug', False),
                 insecure=insecure,
             )
             yield connection

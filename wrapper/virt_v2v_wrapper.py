@@ -30,6 +30,7 @@ import time
 
 from .state import STATE, Disk
 from .common import error, hard_error, log_command_safe
+from .common import RUN_DIR, LOG_DIR
 from .hosts import detect_host
 from .log_parser import log_parser
 from .checks import CHECKS
@@ -38,8 +39,6 @@ from .runners import SubprocessRunner
 # Wrapper version
 VERSION = "23"
 
-RUN_DIR = '/var/lib/uci'
-LOG_DIR = '/var/log/uci'
 LOG_LEVEL = logging.DEBUG
 
 

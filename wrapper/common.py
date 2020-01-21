@@ -11,6 +11,9 @@ from .state import STATE
 RUN_DIR = '/var/lib/uci'
 LOG_DIR = '/var/log/uci'
 
+VDDK_LIBDIR = '/opt/vmware-vix-disklib-distrib'
+VDDK_LIBRARY_PATH = '/opt/vmware-vix-disklib-distrib/lib64'
+
 
 def atexit_command(cmd):
     """

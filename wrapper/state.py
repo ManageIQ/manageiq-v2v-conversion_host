@@ -90,7 +90,7 @@ class _State(StateObject):
 
         self.disk_count = None
         self.disks = []
-        self.failed = False
+        self.failed = None
         self.finished = None
         self.internal = {
             'disk_ids': {},

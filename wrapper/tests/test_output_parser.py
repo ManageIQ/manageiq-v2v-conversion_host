@@ -8,10 +8,10 @@ class TestOutputParser(unittest.TestCase):
     def setUp(self):
         # Destroy any previous state
         STATE.reset()
-
-    def test_disk_number(self):
         STATE.v2v_log = '/dev/null'
         STATE.machine_readable_log = '/dev/null'
+
+    def test_disk_number(self):
         with wrapper.log_parser() as parser:
             parser._current_disk = 0
             parser._current_path = '/path1'
@@ -26,8 +26,6 @@ class TestOutputParser(unittest.TestCase):
             self.assertEqual(STATE.disk_count, 3)
 
     def test_locate_disk(self):
-        STATE.v2v_log = '/dev/null'
-        STATE.machine_readable_log = '/dev/null'
         with wrapper.log_parser() as parser:
             parser._current_disk = 0
             parser._current_path = '[store1] path1.vmdk'
@@ -42,8 +40,6 @@ class TestOutputParser(unittest.TestCase):
             self.assertEqual(STATE.disks[2].path, '[store1] path3.vmdk')
 
     def test_progress(self):
-        STATE.v2v_log = '/dev/null'
-        STATE.machine_readable_log = '/dev/null'
         with wrapper.log_parser() as parser:
             parser._current_disk = 0
             parser._current_path = '/path1'
@@ -60,16 +56,12 @@ class TestOutputParser(unittest.TestCase):
     #         self.assertEqual(parser._current_path, '[store1] /path1.vmdk')
 
     def test_rhv_disk_path_vddk(self):
-        STATE.v2v_log = '/dev/null'
-        STATE.machine_readable_log = '/dev/null'
         with wrapper.log_parser() as parser:
             parser.parse_line(
                 b'nbdkit: debug: Opening file [store1] /path1.vmdk (ha-nfcssl://[store1] path1.vmdk@1.2.3.4:902)')  # NOQA
             self.assertEqual(parser._current_path, '[store1] /path1.vmdk')
 
     def test_rhv_disk_uuid(self):
-        STATE.v2v_log = '/dev/null'
-        STATE.machine_readable_log = '/dev/null'
         with wrapper.log_parser() as parser:
             parser._current_disk = 0
             path = '/path1'
@@ -82,8 +74,6 @@ class TestOutputParser(unittest.TestCase):
                 b'11111111-1111-1111-1111-111111111111')
 
     def test_openstack_volume_uuid(self):
-        STATE.v2v_log = '/dev/null'
-        STATE.machine_readable_log = '/dev/null'
         with wrapper.log_parser() as parser:
             lines = [
                     br"openstack '--os-username=admin' '--os-identity-api-version=3' '--os-user-domain-name=Default' '--os-auth-url=http://10.19.2.25:5000//v3' '--os-volume-api-version=3' '--os-project-domain-name=Default' '--os-project-name=admin' '--os-password=100Root-' 'volume' 'show' '-f' 'json' '77c51545-f2a4-4bbf-8f04-169a15c23354'",  # NOQA

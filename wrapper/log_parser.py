@@ -74,6 +74,13 @@ class OutputParser(object):
             line = self._log.readline()
 
     def parse_line(self, line):
+        # Ovirt VM UUID
+        m = self.OVIRT_VM_ID.search(line)
+        if m is not None:
+            vm_id = m.group('uuid').decode('utf-8')
+            STATE.vm_id = vm_id
+            logging.info('Created VM with id=%s', vm_id)
+
         m = self.COPY_DISK_RE.match(line)
         if m is not None:
             try:
@@ -171,13 +178,6 @@ class OutputParser(object):
             if STATE.internal['disk_ids'].get(index) != volume_id:
                 logging.debug(
                     'Volume \'%s\' is NOT at index %d', volume_id, index)
-
-        # Ovirt VM UUID
-        m = self.OVIRT_VM_ID.search(line)
-        if m is not None:
-            vm_id = m.group('uuid').decode('utf-8')
-            STATE.vm_id = vm_id
-            logging.info('Created VM with id=%s', vm_id)
 
     def close(self):
         self._log.close()

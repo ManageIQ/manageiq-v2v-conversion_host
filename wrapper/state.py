@@ -86,7 +86,7 @@ class _State(StateObject):
         self.v2v_log = None
         self.machine_readable_log = None
 
-        self.disk_count = 0
+        self.disk_count = None
         self.disks = []
         self.failed = False
         self.finished = None

@@ -36,8 +36,15 @@ if ls /dev/v2v-disk* 2>/dev/null ; then
   done
 fi
 
+if [ -f "/data/input/conversion.json" ] ; then
+  ln -s /data/input/conversion.json /var/lib/uci/input.json
+fi
+
+echo "Lising content of /var/lib/uci"
+ls -lR /var/lib/uci
+
 echo "Listing content of /data"
 ls -lR /data
 
 echo "Starting virt-v2v-wrapper..."
-exec /usr/bin/virt-v2v-wrapper $@ < /data/input/conversion.json
+exec /usr/bin/virt-v2v-wrapper $@ < /var/lib/uci/input.json

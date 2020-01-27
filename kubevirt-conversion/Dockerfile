@@ -1,20 +1,18 @@
-FROM centos:7 as common
+FROM centos:8 as common
 
 RUN cd /etc/yum.repos.d/ && \
     curl -LO https://fedorapeople.org/groups/virt/virtio-win/virtio-win.repo && \
-    curl -LO http://file.brq.redhat.com/~tgolembi/repos/libguestfs-1.38.2-12.29.lp.el7ev+json.1/libguestfs.repo
+    curl -LO https://copr.fedorainfracloud.org/coprs/sbonazzo/AdvancedVirtualization/repo/centos-stream/sbonazzo-AdvancedVirtualization-centos-stream.repo
 
 RUN yum -y install \
         epel-release \
-        centos-release-qemu-ev \
     && \
     yum -y update && \
     yum -y install \
         nbdkit \
-        nbdkit-plugin-python2 \
-        nbdkit-plugin-vddk \
-        qemu-kvm-ev \
-        python-six \
+        nbdkit-python-plugin \
+        nbdkit-vddk-plugin \
+        qemu-kvm \
         virt-v2v \
         virtio-win \
     && \
@@ -24,8 +22,8 @@ RUN yum -y install \
 FROM common as builder
 
 RUN yum -y install \
-  python-devel \
-  python-setuptools
+  python36-devel \
+  python3-setuptools
 
 # The container image cannot handle sparse file properly. Keep --size to the
 # required minimum.

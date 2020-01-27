@@ -13,6 +13,6 @@ save_dir="/usr/share/virtio-win/linux"
 for version in "${!location[@]}"
     do
         mkdir -p $save_dir/$version
-        file=$(curl -l "${location[$version]}" 2>/dev/null| grep -Po '(?<=href=")qemu-guest-agent[^"]*.rpm' | head -1)
+        file=$(curl "${location[$version]}" 2>/dev/null| grep -Po '(?<=href=")qemu-guest-agent[^"]*.rpm' | head -1)
         curl ${location[$version]}$file -o $save_dir/$version/$file
     done

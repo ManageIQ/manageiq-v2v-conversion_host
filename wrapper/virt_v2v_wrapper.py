@@ -25,11 +25,10 @@ import signal
 import subprocess
 import stat
 import sys
-import tempfile
 import time
 
 from .state import STATE, Disk
-from .common import error, hard_error, log_command_safe
+from .common import error, hard_error, log_command_safe, write_password
 from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR
 from .hosts import detect_host
 from .log_parser import log_parser
@@ -157,15 +156,6 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
     STATE.write()
 
 
-def write_password(password, password_files, host):
-    pfile = tempfile.mkstemp(suffix='.v2v')
-    password_files.append(pfile[1])
-    os.fchown(pfile[0], host.get_uid(), host.get_gid())
-    os.write(pfile[0], bytes(password.encode('utf-8')))
-    os.close(pfile[0])
-    return pfile[1]
-
-
 def spawn_ssh_agent(data, uid, gid):
     cmd = [
         'setpriv', '--reuid=%d' % uid, '--regid=%d' % gid, '--clear-groups',
@@ -281,8 +271,6 @@ def main():
     logging.info('Will store virt-v2v log in: %s', STATE.v2v_log)
     logging.info('Will store state file in: %s', STATE.state_file)
 
-    password_files = []
-
     # Collect virt-v2v capabilities
     virt_v2v_caps = virt_v2v_capabilities()
     if virt_v2v_caps is None:
@@ -302,16 +290,13 @@ def main():
         logging.info('Writing password file(s)')
         if 'vmware_password' in data:
             data['vmware_password_file'] = write_password(
-                    data['vmware_password'], password_files,
-                    host)
+                    data['vmware_password'], host)
         if 'rhv_password' in data:
-            data['rhv_password_file'] = write_password(data['rhv_password'],
-                                                       password_files,
-                                                       host)
+            data['rhv_password_file'] = write_password(
+                    data['rhv_password'], host)
         if 'ssh_key' in data:
-            data['ssh_key_file'] = write_password(data['ssh_key'],
-                                                  password_files,
-                                                  host)
+            data['ssh_key_file'] = write_password(
+                    data['ssh_key'], host)
 
         if 'luks_keys_vault' not in data:
             data['luks_keys_vault'] = os.path.join(
@@ -334,9 +319,7 @@ def main():
                 for luks_key in luks_keys_vault[data['vm_name']]:
                     data['luks_keys_files'].append({
                         'device': luks_key['device'],
-                        'filename': write_password(luks_key['key'],
-                                                   password_files,
-                                                   host)
+                        'filename': write_password(luks_key['key'], host)
                     })
 
         if STATE.pre_copy is None and 'source_disks' in data:
@@ -386,7 +369,7 @@ def main():
         # Re-raise original error
         raise
     finally:
-        finish(host, data, password_files)
+        finish(host, data)
 
     logging.info('Finished')
     if STATE.failed:
@@ -434,7 +417,7 @@ def validate_data(host, data):
     STATE.pre_copy = PreCopy(data)
 
 
-def finish(host, data, password_files):
+def finish(host, data):
     if STATE.failed:
         # Perform cleanup after failed conversion
         logging.debug('Cleanup phase')
@@ -453,7 +436,7 @@ def finish(host, data, password_files):
 
     # Remove password files
     logging.info('Removing password files')
-    for f in password_files:
+    for f in STATE.internal['password_files']:
         try:
             os.remove(f)
         except OSError:

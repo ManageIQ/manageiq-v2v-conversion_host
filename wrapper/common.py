@@ -6,6 +6,7 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 
 from .state import STATE
 
@@ -105,6 +106,15 @@ def log_command_safe(args, env, log=None):
     if log is None:
         log = logging
     log.info('Executing command: %r, environment: %r', args, env)
+
+
+def write_password(password, host):
+    pfile = tempfile.mkstemp(suffix='.v2v')
+    STATE.internal['password_files'].append(pfile[1])
+    os.fchown(pfile[0], host.get_uid(), host.get_gid())
+    os.write(pfile[0], bytes(password.encode('utf-8')))
+    os.close(pfile[0])
+    return pfile[1]
 
 
 def add_perms_to_file(path, modes, uid=-1, gid=-1):

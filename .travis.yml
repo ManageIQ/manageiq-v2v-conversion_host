@@ -24,6 +24,10 @@ addons:
 install:
   - pip install tox
 
+env:
+  global:
+    - TOX_PARALLEL_NO_SPINNER=1
+
 script:
   # Run syntax checks and linters
   - tox -p all

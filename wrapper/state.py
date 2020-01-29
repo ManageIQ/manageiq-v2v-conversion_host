@@ -99,6 +99,7 @@ class _State(StateObject):
             'display_name': None,
             'ports': [],
             'duplicate_logs': False,
+            'password_files': []
         }
         self.last_message = None
         self.pid = None

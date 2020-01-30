@@ -560,16 +560,19 @@ class PreCopy(StateObject):
         if disk.proc_qemu.poll() is not None:
             return False
 
-        while True:
-            try:
-                line = disk.proc_qemu.stdout.readline()
-            except OSError as err:
-                if err.errno == errno.EAGAIN:
-                    break
+        try:
+            line = disk.proc_qemu.stdout.readline()
+        except OSError as err:
+            if err.errno != errno.EAGAIN:
                 raise
-            matches = self.qemu_progress_re.search(line)
-            if matches is not None and cb_progress is not None:
-                cb_progress(disk, float(matches.group(1)))
+
+        # Short-circuit the regexp code, line is b'' most of the time
+        if not line:
+            return True
+
+        matches = self.qemu_progress_re.search(line)
+        if matches is not None and cb_progress is not None:
+            cb_progress(disk, float(matches.group(1)))
 
         return True
 

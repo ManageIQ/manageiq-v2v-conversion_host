@@ -18,20 +18,18 @@ A set of tools to configure and use hosts (oVirt, OpenStack) for ManageIQ
 
 Project consists of:
 - Ansible role to setup hosts as conversion host for ManageIQ
-- daemonizing wrapper for virt-v2v
+- wrapper for virt-v2v
 
 %package ansible
 Summary: Ansible role to setup oVirt host as conversion host for ManageIQ
 Requires: ansible >= 2.8
 BuildArch: noarch
-Provides: ovirt-ansible-v2v-conversion-host = %{version}-%{release}
-Obsoletes: ovirt-ansible-v2v-conversion-host < 1.11.0-1
 
 %description ansible
 Ansible role to setup hosts as conversion host for ManageIQ
 
 %package wrapper
-Summary: Daemonizing wrapper for virt-v2v
+Summary: Wrapper for virt-v2v
 BuildArch: noarch
 Requires: libcgroup-tools
 Requires: python3
@@ -42,7 +40,7 @@ Requires: %{py3_dist libnbd}
 Requires: %{py3_dist libvirt}
 
 %description wrapper
-Daemonizing wrapper for virt-v2v.
+Wrapper for starting and monitoring virt-v2v.
 
 %prep
 %setup -c -q
@@ -56,19 +54,9 @@ export PYTHON=%{python}
 
 sh build.sh install
 
-# Create symlinks for backward compatibility with
-# ovirt-ansible-v2v-conversion-host. Remove this later.
-mkdir -p %{buildroot}%{_datadir}/ovirt-ansible-v2v-conversion-host/playbooks
-ln -s %{_datadir}/%{name}-ansible/playbooks/conversion_host_check.yml %{buildroot}%{_datadir}/ovirt-ansible-v2v-conversion-host/playbooks/
-ln -s %{_datadir}/%{name}-ansible/playbooks/conversion_host_disable.yml %{buildroot}%{_datadir}/ovirt-ansible-v2v-conversion-host/playbooks/
-ln -s %{_datadir}/%{name}-ansible/playbooks/conversion_host_enable.yml %{buildroot}%{_datadir}/ovirt-ansible-v2v-conversion-host/playbooks/
-# Create symlink for backward compatibility with CFME
-ln -s %{_bindir}/virt-v2v-wrapper %{buildroot}/usr/bin/virt-v2v-wrapper.py
-
 %files ansible
 %{_datadir}/%{ansible_roles_dir}/
 %{_datadir}/%{name}-ansible/
-%{_datadir}/ovirt-ansible-v2v-conversion-host
 %doc README.md
 %doc docs/
 %doc ansible/examples/
@@ -80,15 +68,12 @@ ln -s %{_bindir}/virt-v2v-wrapper %{buildroot}/usr/bin/virt-v2v-wrapper.py
 %doc docs/
 %license LICENSE
 
-%pre wrapper
-# Previously wrapper was installed from role. Remove this rogue file
-# if this is first time we install the RPM.
-if [ $1 -eq 1 -a -f /usr/bin/virt-v2v-wrapper.py ] ; then
-    set -e
-    rm -fv /usr/bin/virt-v2v-wrapper.py
-fi
-
 %changelog
+* Mon Feb  3 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.0-1
+- Prepare for running in container only, possibly in an appliance (UCI)
+- Use only Python 3
+- Add two-phase conversion to oVirt
+
 * Mon Nov 25 2019 Tomáš Golembiovský <tgolembi@redhat.com> 1.16.0-1
 - Ansible changes:
   * bump requirement to Ansible 2.8

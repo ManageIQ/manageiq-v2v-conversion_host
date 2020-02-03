@@ -25,7 +25,7 @@ else
     RPM_RELEASE="0.$GIT.$(date -u +%Y%m%d%H%M%S)"
 fi
 
-ROLE_NAME="oVirt.v2v-conversion-host"
+ROLE_NAME="manageiq.v2v-conversion-host"
 PACKAGE_NAME="v2v-conversion-host"
 ROLE_RPM_NAME="${PACKAGE_NAME}-ansible"
 

@@ -2,8 +2,6 @@
 BuildRequires: %{py3_dist setuptools}
 BuildRequires: python3-devel
 
-%global rolename v2v-conversion-host
-%global roleprefix oVirt.
 %global ansible_roles_dir ansible/roles
 
 Name: @PACKAGE_NAME@

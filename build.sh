@@ -1,6 +1,5 @@
 #!/bin/bash -e
 
-RPM_VERSION="1.16.0"
 KUBEVIRT_VERSION="2.0.0"
 KUBEVIRT_CONVERSION_RELEASE="3"
 KUBEVIRT_VMWARE_RELEASE="3"
@@ -15,6 +14,10 @@ if ! type "${CONTAINER_MGMT}" &>/dev/null; then
     fi
 fi
 
+RPM_VERSION="$(
+    git describe --always --tags --match "v[0-9]*" |
+    sed -e '/^v[0-9.]\+\(-\|$\)/!{q1}; s/^v\([0-9.]\+\).*/\1/'
+)"
 if git describe --exact-match --tags --match "v[0-9]*" > /dev/null 2>&1 ; then
     RPM_RELEASE="1"
 else
@@ -39,7 +42,7 @@ AUX_DATA_DIR="$DATA_DIR/$ROLE_RPM_NAME"
 TARBALL="$PACKAGE_NAME-$RPM_VERSION.tar.gz"
 
 do_dist() {
-  echo "Creating tar archive '$TARBALL' ... "
+  echo "Creating spec file and tar archive '$TARBALL' ... "
   sed \
    -e "s|@RPM_VERSION@|$RPM_VERSION|g" \
    -e "s|@RPM_RELEASE@|$RPM_RELEASE|g" \

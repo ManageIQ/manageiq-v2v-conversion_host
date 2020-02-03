@@ -1,7 +1,0 @@
-dnf-utils
-git
-ansible
-dnf
-golang
-go-compilers-golang-compiler 
-python3-devel

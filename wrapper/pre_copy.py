@@ -17,10 +17,12 @@ from collections import namedtuple
 from packaging import version
 from six.moves.urllib.parse import urlparse, unquote, parse_qs
 from pyVim.connect import SmartConnect, SmartConnectNoSSL, Disconnect
-from pyVmomi import vim  # pylint: disable=no-name-in-module; dynamic module
+from pyVim.task import WaitForTask
+# pylint: disable=no-name-in-module; dynamic module
+from pyVmomi import vim
 
 from .state import STATE, StateObject
-from .common import VDDK_LIBDIR, VDDK_LIBRARY_PATH
+from .common import RUN_DIR, VDDK_LIBDIR, VDDK_LIBRARY_PATH
 from .common import add_perms_to_file, error, nbd_uri_from_unix_socket
 
 
@@ -36,7 +38,7 @@ MAX_PREAD_LEN = 23 << 20        # 23MB (24M requests fail in vddk)
 BlockStatusData = namedtuple('BlockStatusData', ['offset', 'length', 'flags'])
 
 
-def get_block_status(nbd_handle, size):
+def get_block_status(nbd_handle, extents):
     blocks = []
 
     def update_blocks(metacontext, offset, extents, err):
@@ -54,24 +56,34 @@ def get_block_status(nbd_handle, size):
                                                  last_flags)
                 else:
                     blocks.append(BlockStatusData(offset, length, flags))
+            else:
+                blocks.append(BlockStatusData(offset, length, flags))
             offset += length
 
-    last_offset = 0
-    while last_offset < size:
-        missing_length = size - last_offset
-        length = min(missing_length, MAX_BLOCK_STATUS_LEN)
+    for extent in extents:
+        if extent.length < 1 << 20:
+            # Copying 1MB extent is usually faster than requesting block
+            # status on it.  We might make this configurable.
+            blocks.append(BlockStatusData(extent.start, extent.length, 0))
+            continue
 
-        logging.debug('Calling block_status with length=%d offset=%d',
-                      length, last_offset)
+        last_offset = extent.start
+        end_offset = extent.start + extent.length
+        while last_offset < end_offset:
+            missing_length = end_offset - last_offset
+            length = min(missing_length, MAX_BLOCK_STATUS_LEN)
 
-        nbd_handle.block_status(length, last_offset, update_blocks)
+            logging.debug('Calling block_status with length=%d offset=%d',
+                          length, last_offset)
 
-        new_offset = blocks[-1].offset + blocks[-1].length
+            nbd_handle.block_status(length, last_offset, update_blocks)
 
-        if last_offset == new_offset:
-            raise ValueError('No new block status data from NBD')
+            new_offset = blocks[-1].offset + blocks[-1].length
 
-        last_offset = new_offset
+            if last_offset == new_offset:
+                raise ValueError('No new block status data from NBD')
+
+            last_offset = new_offset
 
     return blocks
 
@@ -89,6 +101,7 @@ class _VMWare(object):
         '_uri',
         '_vm',
         '_vm_name',
+        '_snapshots',
     ]
 
     def __init__(self, data):
@@ -96,6 +109,8 @@ class _VMWare(object):
         self._vm = None
         self._vm_name = data['vm_name']
         self.insecure = False
+
+        self._snapshots = []
 
         self._uri = data['vmware_uri']
         uri = urlparse(self._uri)
@@ -152,9 +167,13 @@ class _VMWare(object):
         Disconnect(self._conn)
         self._conn = None
 
+    def keepalive(self):
+        self._conn.CurrentTime()
+
     def get_vm(self):
         self._connect()
         if self._vm:
+            self._vm.Reload()
             return self._vm
 
         view_mgr = self._conn.content.viewManager
@@ -193,6 +212,50 @@ class _VMWare(object):
         return [x for x in config.hardware.device
                 if isinstance(x, vim.vm.device.VirtualDisk)]
 
+    def get_disk_by_key(self, config, key):
+        disks = [x for x in config.hardware.device
+                 if isinstance(x, vim.vm.device.VirtualDisk) and x.key == key]
+        if len(disks) != 1:
+            raise RuntimeError('Integrity error: '
+                               'Cannot find disk with key %s' %
+                               key)
+        return disks[0]
+
+    def create_snapshot(self):
+        vm = self.get_vm()
+        logging.debug('Creating snapshot to get a new change_id')
+        WaitForTask(vm.CreateSnapshot(name='v2v_cbt',
+                                      description='Snapshot to start CBT',
+                                      memory=False,
+                                      # The `quesce` parameter can be False to
+                                      # make it slightly faster, but it should
+                                      # ve first tested independently.
+                                      quiesce=True))
+        # Update the VM data
+        vm = self.get_vm()
+        logging.debug('Snapshot created: %s', vm.snapshot.currentSnapshot)
+        self._snapshots.append(vm.snapshot.currentSnapshot)
+
+    def clean_snapshot(self, final):
+        # Here final means clean all (for the sake of clean-up simplicity)
+        if final:
+            snaps = [s for s in self._snapshots if s is not None]
+            if not snaps:
+                return
+            snapshot = snaps[0]
+            # All snapshots should be removed, there should be none remaining
+            self._snapshots = []
+        else:
+            if len(self._snapshots) < 2:
+                return
+            snapshot = self._snapshots[-2]
+            self._snapshots[-2] = None
+
+        logging.debug('Removing snapshot %s%s',
+                      snapshot, ' with children' if final else '')
+        WaitForTask(snapshot.RemoveSnapshot_Task(final))
+        logging.debug('Snapshot removed')
+
     def __del__(self):
         self._disconnect()
 
@@ -200,14 +263,30 @@ class _VMWare(object):
 class CopyIterationData(StateObject):
     __slots__ = [
         'change_id',
+        'path',
+        'snapshot',
+
         'copied',
         'to_copy',
+
+        'start_time',
+        'end_time',
     ]
 
-    def __init__(self):
-        self.change_id = None
+    _hidden = [
+        'snapshot',
+    ]
+
+    def __init__(self, change_id=None, path=None):
+        self.change_id = change_id
+        self.path = path
+        self.snapshot = None
+
         self.copied = None
         self.to_copy = None
+
+        self.start_time = None
+        self.end_time = None
 
 
 class _PreCopyDisk(StateObject):
@@ -225,11 +304,9 @@ class _PreCopyDisk(StateObject):
         'size',  # in Bytes
         'sock',  # nbdkit's unix socket path
         'status',  # Any string for user-reporting
-        'vmware_object',  # Disk object returned by pyvmomi
     ]
 
     _hidden = [
-        'change_ids',
         'key',
         'local_path',
         'overlay',
@@ -238,19 +315,15 @@ class _PreCopyDisk(StateObject):
         'proc_nbdkit',
         'proc_qemu',
         'sock',
-        'vmware_object',
     ]
 
     def __init__(self, nbd, disk, tmp_dir):
         self.nbd = nbd
-        self.change_ids = []
         self.label = disk.deviceInfo.label
         self.local_path = None
-        self.path = disk.backing.fileName
         self.size = int(disk.capacityInBytes)
         self.status = 'Prepared'
         self.key = disk.key
-        self.vmware_object = disk
         self.logname = '%s(key=%s)' % (self.label, self.key)
 
         self.sock = os.path.join(tmp_dir, 'nbdkit-%s.sock' % self.key)
@@ -259,9 +332,51 @@ class _PreCopyDisk(StateObject):
         self.proc_qemu = None
         self.overlay = None
 
-        self.copies = None
+        self.commit_progress = None
 
-    def copy(self):
+        self.copies = [CopyIterationData("*", disk.backing.fileName)]
+
+    def copy_ref(self, final):
+        return self.copies[-1 if final else -2]
+
+    def get_extents(self, vm, final):
+        ret = []
+        offset = 0
+        copy = self.copy_ref(final)
+
+        logging.debug('Requesting changed disk areas for '
+                      'snapshot "%s" with change id "%s"',
+                      copy.snapshot, copy.change_id)
+
+        while offset < self.size:
+            tmp = vm.QueryChangedDiskAreas(copy.snapshot,
+                                           int(self.key),
+                                           offset,
+                                           copy.change_id)
+            ret += tmp.changedArea
+            offset += tmp.startOffset + tmp.length
+
+        return ret
+
+    def copy(self, vm, final):
+        copy = self.copy_ref(final)
+        copy.start_time = time.time()
+        self.status = 'Copying (getting extent information)'
+        STATE.write()
+
+        extents = self.get_extents(vm, final)
+        if len(extents) == 0:
+            copy.to_copy = 0
+            copy.copied = 0
+            copy.end_time = time.time()
+            if not final and len(self.copies) > 2:
+                self.copies[-2].path = None
+                self.copies[-2].change_id = None
+                self.copies[-3].snapshot = None
+            self.status = 'Copied'
+            STATE.write()
+            return
+
         self.status = 'Copying (connecting)'
         STATE.write()
 
@@ -270,28 +385,36 @@ class _PreCopyDisk(StateObject):
         nbd_handle.connect_uri(nbd_uri_from_unix_socket(self.sock))
         fd = os.open(self.local_path, os.O_WRONLY)
 
-        if self.copies is None:
-            self.copies = []
-        self.copies.append(CopyIterationData())
-
         try:
-            self._copy_all(nbd_handle, fd)
+            self._copy_all(nbd_handle, fd, extents, final)
+            self.status = 'Copied'
+            copy.end_time = time.time()
+            if not final and len(self.copies) > 2:
+                self.copies[-2].path = None
+                self.copies[-2].change_id = None
+                self.copies[-3].snapshot = None
+            STATE.write()
         except Exception:
             self.status = 'Failed during copy'
             STATE.write()
+
+            # TODO: asdf: figure out when do we try to recover
+
+            raise
+        finally:
+            # No matter whether it failed or not, we do not need to keep the
+            # snapshot, just the change_id
             os.close(fd)
             nbd_handle.shutdown()
-            raise
 
-        self.status = 'Copied'
-        STATE.write()
+    def _copy_all(self, nbd_handle, fd, extents, final):
+        copy = self.copy_ref(final)
 
-    def _copy_all(self, nbd_handle, fd):
         # This is called back when nbd_aio_pread completes.
         def _read_completed(fd, buf, offset, err):
             logging.debug('Writing %d B to offset %d B', buf.size(), offset)
             os.pwrite(fd, buf.to_bytearray(), offset)
-            self.copies[-1].copied += buf.size()
+            copy.copied += buf.size()
             STATE.write()
             # By returning 1 here we auto-retire the aio_pread command.
             return 1
@@ -315,14 +438,13 @@ class _PreCopyDisk(StateObject):
         self.status = 'Copying (getting block stats)'
         STATE.write()
 
-        # TODO: We'll use extents later
-        blocks = get_block_status(nbd_handle, self.size)
+        blocks = get_block_status(nbd_handle, extents)
         data_blocks = [x for x in blocks if not x.flags & self.nbd.STATE_HOLE]
 
         logging.debug('Block status filtered down to %d data blocks',
                       len(data_blocks))
-        self.copies[-1].copied = 0
-        self.copies[-1].to_copy = sum([block.length for block in data_blocks])
+        copy.copied = 0
+        copy.to_copy = sum([block.length for block in data_blocks])
 
         if len(data_blocks) == 0:
             logging.debug('No extents have allocated data for disk: %s',
@@ -332,13 +454,13 @@ class _PreCopyDisk(StateObject):
         self.status = 'Copying'
         STATE.write()
 
-        logging.debug('Copying %d B of data', self.copies[-1].to_copy)
+        logging.debug('Copying %d B of data', copy.to_copy)
 
         for block in data_blocks:
             if block.flags & self.nbd.STATE_ZERO:
                 # Optimize for memory usage, maybe?
                 os.pwrite(fd, [0] * block.length, block.offset)
-                self.copies[-1].copied += block.length
+                copy.copied += block.length
                 STATE.write()
             else:
                 count = 0
@@ -358,28 +480,47 @@ class _PreCopyDisk(StateObject):
 
         _wait_for_aio_commands_to_finish(nbd_handle)
 
-        if self.copies[-1].copied == 0:
-            logging.debug('Nothing to copy for disk: %s', self.logname)
-        else:
-            logging.debug('Copied %d B for disk: %s',
-                          self.copies[-1].copied, self.logname)
+        logging.debug('Copied %d B for disk: %s',
+                      copy.copied, self.logname)
+
+    def update_change_ids(self, orig_disk, device, snapshot):
+        self.copies[-1].snapshot = snapshot
+        change_id = device.backing.changeId
+        new_filename = orig_disk.backing.fileName
+
+        # This might happen for some special disks and we might need to handle
+        # it, although it is out of the question for now
+        if change_id is None:
+            raise RuntimeError('Missing changeId for a disk')
+
+        logging.debug("New changeId=%s", change_id)
+        self.copies.append(CopyIterationData(change_id, new_filename))
+        STATE.write()
 
 
 class PreCopy(StateObject):
     __slots__ = [
-        'data',
         '_tmp_dir',
         '_tmp_dir_path',
         'vmware',
+        '_vmware_password_file',
+        'warm',
+        '_cutover_path',
+        '_iteration_seconds',
+        '_copy_trigger_path',
 
         'disks',
     ]
 
     _hidden = [
-        'data',
         '_tmp_dir',
         '_tmp_dir_path',
         'vmware',
+        '_vmware_password_file',
+        'warm',
+        '_cutover_path',
+        '_iteration_seconds',
+        '_copy_trigger_path',
     ]
 
     qemu_progress_re = re.compile(r'\((\d+\.\d+)/100%\)')
@@ -412,6 +553,12 @@ class PreCopy(StateObject):
         self.disks = None
 
         self.vmware = _VMWare(data)
+        self.warm = data['warm']
+        self._cutover_path = os.path.join(RUN_DIR, 'cutover')
+        self._copy_trigger_path = os.path.join(RUN_DIR, 'copy_trigger')
+        self._iteration_seconds = int(data.get('iteration_seconds', 3600))
+        if self._iteration_seconds < 0:
+            raise RuntimeError('Invalid value for `iteration_seconds`')
 
         # Let others browse it
         add_perms_to_file(self._tmp_dir_path, stat.S_IXOTH, -1, -1)
@@ -428,6 +575,12 @@ class PreCopy(StateObject):
         vm = self.vmware.get_vm()
         if vm.snapshot:
             logging.warning("VM should not have any previous snapshots")
+
+        logging.info('Enabling CBT for the VM')
+        config_spec = vim.vm.ConfigSpec(changeTrackingEnabled=True)
+        WaitForTask(vm.Reconfigure(config_spec))
+        logging.debug('CBT for the VM enabled')
+
         disks = self.vmware.get_disks_from_config(vm.config)
 
         self.disks = [_PreCopyDisk(self.nbd, d, self._tmp_dir_path)
@@ -446,7 +599,10 @@ class PreCopy(StateObject):
             def __repr__(self):
                 return 'DiskToFix(path=%s, fixed=%s)' % (self.path, self.fixed)
 
-        disk_map = {disk.path: DiskToFix(disk.local_path)
+        # We're taking the name of the original disk because at this point all
+        # intermediate (CBT-related) snapshots were cleared and there should be
+        # no new name for the disks
+        disk_map = {disk.copies[0].path: DiskToFix(disk.local_path)
                     for disk in self.disks}
         logging.debug('Fixing disks with disk map: %s', disk_map)
         tree = ETree.fromstring(domxml)
@@ -480,7 +636,7 @@ class PreCopy(StateObject):
             f.write(self._fix_disks(self.vmware.get_domxml()))
         return xmlfile
 
-    def _get_nbdkit_cmd(self, disk, vmware_password_file, filters):
+    def _get_nbdkit_cmd(self, disk, filters, final):
         env = 'LD_LIBRARY_PATH=%s' % VDDK_LIBRARY_PATH
         if 'LD_LIBRARY_PATH' in os.environ:
             env += ':' + os.environ['LD_LIBRARY_PATH']
@@ -504,10 +660,10 @@ class PreCopy(StateObject):
             # pylint: disable=protected-access
             'vm=moref=%s' % self.vmware.get_vm()._moId,
             'server=%s' % self.vmware.server,
-            'password=+%s' % vmware_password_file,
+            'password=+%s' % self._vmware_password_file,
             'thumbprint=%s' % self.vmware.thumbprint,
             'libdir=%s' % VDDK_LIBDIR,
-            'file=%s' % disk.path,
+            'file=%s' % disk.copy_ref(final).path,
         ]
         if self.vmware.user:
             nbdkit_cmd.append('user=%s' % self.vmware.user)
@@ -518,7 +674,7 @@ class PreCopy(StateObject):
 
         return nbdkit_cmd
 
-    def _start_nbdkits(self, vmware_password_file):
+    def _start_nbdkits(self, final):
         paths = []
         filters = ['cacheextents', 'retry']
 
@@ -536,12 +692,12 @@ class PreCopy(StateObject):
                 filters.remove(filt)
 
         for disk in self.disks:
-            cmd = self._get_nbdkit_cmd(disk, vmware_password_file, filters)
+            cmd = self._get_nbdkit_cmd(disk, filters, final)
             logging.debug('Starting nbdkit: %s', cmd)
-            # logging.debug('Logging nbdkit output into: %s', log_path)
+            log_fd = open(STATE.wrapper_log, 'a')
             disk.proc_nbdkit = subprocess.Popen(cmd,
-                                                stdout=subprocess.DEVNULL,
-                                                stderr=subprocess.DEVNULL,
+                                                stdout=log_fd,
+                                                stderr=subprocess.STDOUT,
                                                 stdin=subprocess.DEVNULL)
             paths.append((disk.pidfile, disk.sock))
 
@@ -570,6 +726,10 @@ class PreCopy(StateObject):
                 disk.proc_nbdkit.kill()
                 disk.proc_nbdkit.wait()
             disk.proc_nbdkit = None
+            try:
+                os.remove(disk.sock)
+            except FileNotFoundError:
+                pass
 
     # Returns True/False whether the process is still running
     def _update_qemu_proc(self, disk, cb_progress):
@@ -607,17 +767,67 @@ class PreCopy(StateObject):
                 if cb_done is not None:
                     cb_done(disk, retcode == 0)
 
+    def _update_disk_data(self):
+        vm = self.vmware.get_vm()
+        snapshot = vm.snapshot.currentSnapshot
+        for device in snapshot.config.hardware.device:
+            if not isinstance(device, vim.vm.device.VirtualDisk):
+                continue
+            disk = [x for x in self.disks if x.key == device.key]
+            config = self.vmware.get_vm().config
+            orig_disk = self.vmware.get_disk_by_key(config, device.key)
+            if not disk:
+                # Start tracking the disk now
+                self.disks.append(_PreCopyDisk(self.nbd, orig_disk,
+                                               self._tmp_dir_path))
+            elif len(disk) == 1:
+                disk[0].update_change_ids(orig_disk, device, snapshot)
+            else:
+                raise RuntimeError('Integrity error: Multiple disks have '
+                                   'the same key, which should be unique!')
+
+    def _wait_for_triggers(self):
+        endt = time.time() + self._iteration_seconds
+        while endt > time.time():
+            self.vmware.keepalive()
+
+            if os.path.exists(self._cutover_path):
+                logging.debug('Found file notifying end of the '
+                              'warm part of first conversion phase')
+                self.warm = False
+                return
+            if os.path.exists(self._copy_trigger_path):
+                os.remove(self._copy_trigger_path)
+                return
+            time.sleep(5)
+
     def copy_disks(self, vmware_password_file):
         "Copy all disk data from the VMWare server to locally mounted disks."
 
-        self._start_nbdkits(vmware_password_file)
+        self._vmware_password_file = vmware_password_file
+
+        while self.warm:
+            self.vmware.create_snapshot()
+            self._update_disk_data()
+            self._copy_iteration(final=False)
+            self._wait_for_triggers()
+
+        if self.vmware.get_vm().runtime.powerState != 'poweredOff':
+            raise RuntimeError('Cannot perform final copy for running VM')
+
+        self._copy_iteration(final=True)
+
+    def _copy_iteration(self, final):
+
+        self._start_nbdkits(final)
 
         ndisks = len(self.disks)
         for i, disk in enumerate(self.disks):
             logging.debug('Copying disk %d/%d', i, ndisks)
-            disk.copy()
+            disk.copy(self.vmware.get_vm(), final)
 
         self._stop_nbdkits()
+        self.vmware.clean_snapshot(final)
 
     def commit_overlays(self):
         "Commit all overlays to local disks."
@@ -695,6 +905,12 @@ class PreCopy(StateObject):
                           'conversions of the same hose might fail if this '
                           'file is not removed' % disk.overlay, exception=True)
             disk.overlay = None
+
+        try:
+            self.vmware.clean_snapshot(True)
+        except Exception:
+            error('Error cleaning up snapshots after another error',
+                  exception=True)
 
     def finish(self):
         "Finish anything that is needed after successful conversion"

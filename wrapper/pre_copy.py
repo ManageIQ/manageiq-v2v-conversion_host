@@ -184,8 +184,10 @@ class _VMWare(object):
         cred_info = [[libvirt.VIR_CRED_AUTHNAME, libvirt.VIR_CRED_PASSPHRASE],
                      auth_cb, None]
         conn = libvirt.openAuth(self._uri, cred_info)
+        domxml = conn.lookupByName(self._vm_name).XMLDesc()
+        logging.debug('Fetched domxml: \n%s', domxml)
 
-        return conn.lookupByName(self._vm_name).XMLDesc()
+        return domxml
 
     def get_disks_from_config(self, config):
         return [x for x in config.hardware.device

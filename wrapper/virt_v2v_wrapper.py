@@ -410,8 +410,13 @@ def validate_data(host, data):
     else:
         data['network_mappings'] = []
 
+    if 'warm' not in data:
+        data['warm'] = False
     if 'two_phase' not in data:
-        data['two_phase'] = False
+        data['two_phase'] = data['warm']
+    elif data['warm'] and not data['two_phase']:
+        hard_error('Cannot disable two-phase conversion '
+                   'when warm conversion is requested')
 
     host.validate_data(data)
     STATE.pre_copy = PreCopy(data)

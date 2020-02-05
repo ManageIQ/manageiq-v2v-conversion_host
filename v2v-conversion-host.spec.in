@@ -87,6 +87,15 @@ sh build.sh install
 %endif # %if 0%{ansible_only} == 0
 
 %changelog
+* Wed Feb  5 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.1-1
+- Allow building the Ansible subpackage on EL7
+- Fix some dependencies on python modules
+- Update source URL (#16)
+- Wrapper changes:
+  * do not block on progress update when there's no input from qemu-img (#15)
+  * make module version match RPM version and the reported version to match RPM
+    version-release pair
+
 * Mon Feb  3 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.0-1
 - Prepare for running in container only, possibly in an appliance (UCI)
 - Use only Python 3

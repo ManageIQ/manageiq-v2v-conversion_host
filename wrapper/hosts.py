@@ -661,7 +661,7 @@ class OvirtHost(_BaseHost):
 
         for i, pc_disk in enumerate(STATE.pre_copy.disks):
             dt = datetime.datetime.now(datetime.timezone.utc).ctime()
-            name = '%s_Disk%d' % (data['vm_name'], i)
+            name = '%s_Disk%d' % (data['vm_name'], i + 1)
             logging.debug('Creating disk #%d: "%s"', i, name)
             disk = self.sdk.types.Disk(
                 name=name,

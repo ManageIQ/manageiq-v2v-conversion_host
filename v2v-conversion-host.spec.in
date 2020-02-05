@@ -36,8 +36,8 @@ Requires: python3
 Requires: %{py3_dist pycurl}
 Requires: %{py3_dist packaging}
 Requires: %{py3_dist pyvmomi}
-Requires: %{py3_dist libnbd}
-Requires: %{py3_dist libvirt}
+Requires: python3-libnbd
+Requires: %{py3_dist libvirt-python}
 
 %description wrapper
 Wrapper for starting and monitoring virt-v2v.

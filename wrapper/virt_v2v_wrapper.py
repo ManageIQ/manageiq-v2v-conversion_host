@@ -35,9 +35,9 @@ from .log_parser import log_parser
 from .checks import CHECKS
 from .runners import SubprocessRunner
 from .pre_copy import PreCopy
+from .meta import VERSION, RELEASE
 
-# Wrapper version
-VERSION = "23"
+VERSION = "%s-%s" % (VERSION, RELEASE)
 
 LOG_LEVEL = logging.DEBUG
 

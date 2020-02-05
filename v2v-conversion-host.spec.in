@@ -1,6 +1,14 @@
+%if 0%{?rhel} < 8
+%global ansible_only 1
+%else
+%global ansible_only 0
+%endif
+
+%if 0%{ansible_only} == 0
 %global python %{__python3}
 BuildRequires: %{py3_dist setuptools}
 BuildRequires: python3-devel
+%endif
 
 %global ansible_roles_dir ansible/roles
 
@@ -28,6 +36,8 @@ BuildArch: noarch
 %description ansible
 Ansible role to setup hosts as conversion host for ManageIQ
 
+%if 0%{ansible_only} == 0
+
 %package wrapper
 Summary: Wrapper for virt-v2v
 BuildArch: noarch
@@ -42,6 +52,8 @@ Requires: %{py3_dist libvirt-python}
 %description wrapper
 Wrapper for starting and monitoring virt-v2v.
 
+%endif # %if 0%{ansible_only} == 0
+
 %prep
 %setup -c -q
 
@@ -50,7 +62,9 @@ export DATA_DIR=%{buildroot}%{_datadir}
 export BIN_DIR=%{buildroot}%{_bindir}
 export PYTHON=%{python}
 
+%if 0%{ansible_only} == 0
 %{python} setup.py install --single-version-externally-managed -O1 --root=$RPM_BUILD_ROOT --record=INSTALLED_FILES
+%endif # %if 0%{ansible_only} == 0
 
 sh build.sh install
 
@@ -62,11 +76,15 @@ sh build.sh install
 %doc ansible/examples/
 %license LICENSE
 
+%if 0%{ansible_only} == 0
+
 %files wrapper -f INSTALLED_FILES
 %{_bindir}/virt-v2v-wrapper*
 %doc README.md
 %doc docs/
 %license LICENSE
+
+%endif # %if 0%{ansible_only} == 0
 
 %changelog
 * Mon Feb  3 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.0-1

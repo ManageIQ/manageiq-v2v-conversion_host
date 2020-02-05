@@ -443,8 +443,12 @@ class PreCopy(StateObject):
                 self.path = path
                 self.fixed = False
 
+            def __repr__(self):
+                return 'DiskToFix(path=%s, fixed=%s)' % (self.path, self.fixed)
+
         disk_map = {disk.path: DiskToFix(disk.local_path)
                     for disk in self.disks}
+        logging.debug('Fixing disks with disk map: %s', disk_map)
         tree = ETree.fromstring(domxml)
         for disk in tree.find('devices').findall('disk'):
             src = disk.find('source')

@@ -41,13 +41,18 @@ AUX_DATA_DIR="$DATA_DIR/$ROLE_RPM_NAME"
 
 TARBALL="$PACKAGE_NAME-$RPM_VERSION.tar.gz"
 
-do_dist() {
-  echo "Creating spec file and tar archive '$TARBALL' ... "
+_replace_vars() {
   sed \
    -e "s|@RPM_VERSION@|$RPM_VERSION|g" \
    -e "s|@RPM_RELEASE@|$RPM_RELEASE|g" \
    -e "s|@PACKAGE_NAME@|$PACKAGE_NAME|g" \
-   < "$PACKAGE_NAME.spec.in" > "$PACKAGE_NAME.spec"
+   < "$1" > "$2"
+}
+
+do_dist() {
+  echo "Creating spec file and tar archive '$TARBALL' ... "
+  _replace_vars "$PACKAGE_NAME.spec.in" "$PACKAGE_NAME.spec"
+  _replace_vars "meta.py.in" "meta.py"
 
   git ls-files | tar --files-from /proc/self/fd/0 -czf "$TARBALL" "$PACKAGE_NAME.spec"
   echo "tar archive '$TARBALL' created."

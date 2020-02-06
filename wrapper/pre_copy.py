@@ -5,7 +5,6 @@ import errno
 import fcntl
 import libvirt
 import logging
-import nbd
 import re
 import six
 import stat
@@ -240,7 +239,8 @@ class _PreCopyDisk(StateObject):
         'vmware_object',
     ]
 
-    def __init__(self, disk, tmp_dir):
+    def __init__(self, nbd, disk, tmp_dir):
+        self.nbd = nbd
         self.change_ids = []
         self.label = disk.deviceInfo.label
         self.local_path = None
@@ -263,7 +263,7 @@ class _PreCopyDisk(StateObject):
         self.status = 'Copying (connecting)'
         STATE.write()
 
-        nbd_handle = nbd.NBD()
+        nbd_handle = self.nbd.NBD()
         nbd_handle.add_meta_context("base:allocation")
         nbd_handle.connect_uri(nbd_uri_from_unix_socket(self.sock))
         fd = os.open(self.local_path, os.O_WRONLY)
@@ -315,7 +315,7 @@ class _PreCopyDisk(StateObject):
 
         # TODO: We'll use extents later
         blocks = get_block_status(nbd_handle, self.size)
-        data_blocks = [x for x in blocks if not x.flags & nbd.STATE_HOLE]
+        data_blocks = [x for x in blocks if not x.flags & self.nbd.STATE_HOLE]
 
         logging.debug('Block status filtered down to %d data blocks',
                       len(data_blocks))
@@ -333,7 +333,7 @@ class _PreCopyDisk(StateObject):
         logging.debug('Copying %d B of data', self.copies[-1].to_copy)
 
         for block in data_blocks:
-            if block.flags & nbd.STATE_ZERO:
+            if block.flags & self.nbd.STATE_ZERO:
                 # Optimize for memory usage, maybe?
                 os.pwrite(fd, [0] * block.length, block.offset)
                 self.copies[-1].copied += block.length
@@ -346,7 +346,7 @@ class _PreCopyDisk(StateObject):
                     length = min(block.length - count, MAX_PREAD_LEN)
                     offset = block.offset + count
 
-                    buf = nbd.Buffer(length)
+                    buf = self.nbd.Buffer(length)
                     nbd_handle.aio_pread(buf, offset,
                                          lambda e, f=fd, b=buf, o=offset:
                                          _read_completed(f, b, o, e))
@@ -386,6 +386,12 @@ class PreCopy(StateObject):
     def __new__(cls, data):
         if not data.get('two_phase', False):
             return None
+        try:
+            import nbd
+        except ImportError:
+            raise RuntimeError('libnbd is not available, but required for '
+                               'two-phase conversion is required')
+
         nbd_version = version.parse(nbd.NBD().get_version())
         if nbd_version < NBD_MIN_VERSION:
             raise RuntimeError('libnbd is too old (%s), '
@@ -394,6 +400,9 @@ class PreCopy(StateObject):
         return super(PreCopy, cls).__new__(cls)
 
     def __init__(self, data):
+        import nbd
+        self.nbd = nbd
+
         self.output_format = data['output_format']
         self._tmp_dir = tempfile.TemporaryDirectory(prefix='v2v-')
         self._tmp_dir_path = self._tmp_dir.name
@@ -419,7 +428,8 @@ class PreCopy(StateObject):
             logging.warning("VM should not have any previous snapshots")
         disks = self.vmware.get_disks_from_config(vm.config)
 
-        self.disks = [_PreCopyDisk(d, self._tmp_dir_path) for d in disks]
+        self.disks = [_PreCopyDisk(self.nbd, d, self._tmp_dir_path)
+                      for d in disks]
         STATE.disks = self.disks
         STATE.write()
 

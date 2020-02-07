@@ -47,14 +47,18 @@ _replace_vars() {
    -e "s|@RPM_RELEASE@|$RPM_RELEASE|g" \
    -e "s|@PACKAGE_NAME@|$PACKAGE_NAME|g" \
    < "$1" > "$2"
+  echo "Wrote $2"
+}
+
+
+do_prep() {
+  _replace_vars "$PACKAGE_NAME.spec.in" "$PACKAGE_NAME.spec"
+  _replace_vars "wrapper/meta.py.in" "wrapper/meta.py"
 }
 
 do_dist() {
+  do_prep
   echo "Creating spec file and tar archive '$TARBALL' ... "
-  _replace_vars "$PACKAGE_NAME.spec.in" "$PACKAGE_NAME.spec"
-  _replace_vars "meta.py.in" "meta.py"
-  _replace_vars "meta.py.in" "wrapper/meta.py"
-
   (
   git ls-files ; ls \
     meta.py \

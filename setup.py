@@ -4,7 +4,7 @@
 from setuptools import setup, find_packages
 
 meta = {}
-exec(open('meta.py').read(), meta)
+exec(open('wrapper/meta.py').read(), meta)
 
 setup(
     name=meta.get('NAME'),

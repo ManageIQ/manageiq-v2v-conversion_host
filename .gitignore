@@ -6,8 +6,6 @@ exported-artifacts/
 kubevirt-vmware/build/_output
 __pycache__/
 v2v-conversion-host.spec
-meta.py
-wrapper/meta.py
 
 build/
 dist/

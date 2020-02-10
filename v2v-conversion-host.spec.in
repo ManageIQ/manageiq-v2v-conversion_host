@@ -87,6 +87,10 @@ sh build.sh install
 %endif # %if 0%{ansible_only} == 0
 
 %changelog
+* Mon Feb 10 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.2-1
+- Wrapper changes:
+  * make libnbd optional (but required for two-phase conversions)
+
 * Wed Feb  5 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.1-1
 - Allow building the Ansible subpackage on EL7
 - Fix some dependencies on python modules

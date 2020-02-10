@@ -1,7 +1,7 @@
 """ Basic project metadata, all in one place """
 
 NAME = "virt-v2v-wrapper"
-VERSION = "2.0.2"
+VERSION = "2.0.3"
 RELEASE = "1"
 DESCRIPTION = "Tool for converting VMs using virt-v2v in an automated fashion"
 KEYWORDS = "v2v, kvm, vmware, conversion"

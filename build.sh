@@ -61,7 +61,6 @@ do_dist() {
   echo "Creating spec file and tar archive '$TARBALL' ... "
   (
   git ls-files ; ls \
-    meta.py \
     wrapper/meta.py \
   ) | tar --files-from /proc/self/fd/0 -czf "$TARBALL" "$PACKAGE_NAME.spec"
   echo "tar archive '$TARBALL' created."

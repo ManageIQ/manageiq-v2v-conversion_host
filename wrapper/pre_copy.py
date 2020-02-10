@@ -389,8 +389,8 @@ class PreCopy(StateObject):
         try:
             import nbd
         except ImportError:
-            raise RuntimeError('libnbd is not available, but required for '
-                               'two-phase conversion is required')
+            raise RuntimeError('libnbd is not available, it is required for '
+                               'two-phase conversion')
 
         nbd_version = version.parse(nbd.NBD().get_version())
         if nbd_version < NBD_MIN_VERSION:

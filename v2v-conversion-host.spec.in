@@ -18,8 +18,7 @@ Version: @RPM_VERSION@
 Release: @RPM_RELEASE@%{?release_suffix}%{?dist}
 Source0: https://github.com/ManageIQ/manageiq-v2v-conversion_host/releases/download/v%{version}/%{name}-%{version}.tar.gz
 License: ASL 2.0
-Group:          Virtualization/Management
-Url:            http://www.ovirt.org
+Group:   Virtualization/Management
 
 %description
 A set of tools to configure and use hosts (oVirt, OpenStack) for ManageIQ

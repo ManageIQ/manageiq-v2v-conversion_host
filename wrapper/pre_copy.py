@@ -217,8 +217,8 @@ class _VMWare(object):
                  if isinstance(x, vim.vm.device.VirtualDisk) and x.key == key]
         if len(disks) != 1:
             raise RuntimeError('Integrity error: '
-                               'Cannot find disk with key %s' %
-                               key)
+                               'Number of disks with key %s: %d' %
+                               (key, len(disks)))
         return disks[0]
 
     def create_snapshot(self):
@@ -227,9 +227,9 @@ class _VMWare(object):
         WaitForTask(vm.CreateSnapshot(name='v2v_cbt',
                                       description='Snapshot to start CBT',
                                       memory=False,
-                                      # The `quesce` parameter can be False to
+                                      # The `quiesce` parameter can be False to
                                       # make it slightly faster, but it should
-                                      # ve first tested independently.
+                                      # be first tested independently.
                                       quiesce=True))
         # Update the VM data
         vm = self.get_vm()

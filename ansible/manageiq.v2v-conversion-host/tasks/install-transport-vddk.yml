@@ -28,11 +28,4 @@
         remote_src: true
 
   when:
-    - not v2v_vddk_library_installed or
-      not v2v_nbdkit_plugin_installed or
-      not v2v_nbdkit_plugin_working
-
-- name: Make sure VDDK plugin is installed
-  yum:
-    state: "{{ v2v_yum_check }}"
-    name: nbdkit-plugin-vddk
+    - not v2v_vddk_library_installed

@@ -85,6 +85,9 @@ sh build.sh install
 %endif # %if 0%{ansible_only} == 0
 
 %changelog
+* Wed Feb 19 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.4-1
+- Clean up deprecated lines from Ansible roles
+
 * Mon Feb 10 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.3-1
 - Remove libnbd also from RPM deps
 

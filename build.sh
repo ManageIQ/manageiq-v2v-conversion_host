@@ -113,7 +113,7 @@ do_build_vmware() {
     IPATH="$GOPATH/src/github.com/ovirt/v2v-conversion-host/"
     mkdir -p "$IPATH"
     pushd $IPATH > /dev/null
-    ln -s $(dirs +2)/kubevirt-vmware
+    ln -s $(dirs -l +2)/kubevirt-vmware
     cd kubevirt-vmware
 
     # Build operator

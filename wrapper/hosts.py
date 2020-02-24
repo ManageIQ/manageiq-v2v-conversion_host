@@ -327,7 +327,7 @@ class OpenstackHost(_BaseHost):
                     return
                 volume_state = volume_state.rstrip()
                 logging.info('Current volume state: %s.', volume_state)
-                if volume_state == 'available':
+                if volume_state == b'available':
                     logging.info(
                         'Volume detached in %s second(s), trasferring.',
                         int(time.time() - start_at))
@@ -337,6 +337,7 @@ class OpenstackHost(_BaseHost):
             if not is_available:
                 STATE.failed = True
                 error(
+                    'Volume not ready in time',
                     'Volume did not get ready (available) '
                     'for transfer within %s seconds.',
                     TIMEOUT)

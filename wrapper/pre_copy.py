@@ -293,6 +293,7 @@ class _PreCopyDisk(StateObject):
     __slots__ = [
         'commit_progress',
         'copies',  # Information for copy iterations (mostly progress)
+        'extents',  # List of allocated extents of the disk
         'key',  # Key on the VMWare server
         'label',  # Label for nicer user reporting
         'local_path',  # Path on local filesystem
@@ -307,6 +308,7 @@ class _PreCopyDisk(StateObject):
     ]
 
     _hidden = [
+        'extents',
         'key',
         'local_path',
         'overlay',
@@ -340,7 +342,7 @@ class _PreCopyDisk(StateObject):
         return self.copies[-1 if final else -2]
 
     def get_extents(self, vm, final):
-        ret = []
+        self.extents = []
         offset = 0
         copy = self.copy_ref(final)
 
@@ -353,10 +355,8 @@ class _PreCopyDisk(StateObject):
                                            int(self.key),
                                            offset,
                                            copy.change_id)
-            ret += tmp.changedArea
+            self.extents += tmp.changedArea
             offset += tmp.startOffset + tmp.length
-
-        return ret
 
     def copy(self, vm, final):
         copy = self.copy_ref(final)
@@ -364,8 +364,8 @@ class _PreCopyDisk(StateObject):
         self.status = 'Copying (getting extent information)'
         STATE.write()
 
-        extents = self.get_extents(vm, final)
-        if len(extents) == 0:
+        self.get_extents(vm, final)
+        if len(self.extents) == 0:
             copy.to_copy = 0
             copy.copied = 0
             copy.end_time = time.time()
@@ -386,7 +386,7 @@ class _PreCopyDisk(StateObject):
         fd = os.open(self.local_path, os.O_WRONLY)
 
         try:
-            self._copy_all(nbd_handle, fd, extents, final)
+            self._copy_all(nbd_handle, fd, final)
             self.status = 'Copied'
             copy.end_time = time.time()
             if not final and len(self.copies) > 2:
@@ -407,7 +407,7 @@ class _PreCopyDisk(StateObject):
             os.close(fd)
             nbd_handle.shutdown()
 
-    def _copy_all(self, nbd_handle, fd, extents, final):
+    def _copy_all(self, nbd_handle, fd, final):
         copy = self.copy_ref(final)
 
         # This is called back when nbd_aio_pread completes.
@@ -438,7 +438,7 @@ class _PreCopyDisk(StateObject):
         self.status = 'Copying (getting block stats)'
         STATE.write()
 
-        blocks = get_block_status(nbd_handle, extents)
+        blocks = get_block_status(nbd_handle, self.extents)
         data_blocks = [x for x in blocks if not x.flags & self.nbd.STATE_HOLE]
 
         logging.debug('Block status filtered down to %d data blocks',

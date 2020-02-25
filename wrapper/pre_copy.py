@@ -358,7 +358,7 @@ class _PreCopyDisk(StateObject):
             self.extents += tmp.changedArea
             offset += tmp.startOffset + tmp.length
 
-    def copy(self, vm, final):
+    def copy(self, vm, final, keepalive=None):
         copy = self.copy_ref(final)
         copy.start_time = time.time()
         self.status = 'Copying (getting extent information)'
@@ -386,7 +386,7 @@ class _PreCopyDisk(StateObject):
         fd = os.open(self.local_path, os.O_WRONLY)
 
         try:
-            self._copy_all(nbd_handle, fd, final)
+            self._copy_all(nbd_handle, fd, final, keepalive)
             self.status = 'Copied'
             copy.end_time = time.time()
             if not final and len(self.copies) > 2:
@@ -407,7 +407,7 @@ class _PreCopyDisk(StateObject):
             os.close(fd)
             nbd_handle.shutdown()
 
-    def _copy_all(self, nbd_handle, fd, final):
+    def _copy_all(self, nbd_handle, fd, final, keepalive):
         copy = self.copy_ref(final)
 
         # This is called back when nbd_aio_pread completes.
@@ -416,13 +416,23 @@ class _PreCopyDisk(StateObject):
             os.pwrite(fd, buf.to_bytearray(), offset)
             copy.copied += buf.size()
             STATE.write()
+            # Everything is running in the same thread, so we can safely call
+            # keepalive here as that makes it more spread out (lower chance of
+            # not being called for a long time)
+            if keepalive is not None:
+                keepalive()
             # By returning 1 here we auto-retire the aio_pread command.
             return 1
 
         # Process any AIO requests without blocking.
-        def _process_aio_requests(nbd_handle):
+        def _process_aio_requests(nbd_handle, keepalive):
             while nbd_handle.poll(0) == 1:
-                pass
+                # One more keepalive call just in case no write was completed
+                # for a long time.
+                # TODO: Ideally all keepalive calls would be wrapped in another
+                # condition so that they are not called too often.
+                if keepalive is not None:
+                    keepalive()
 
         # Wait until there's less AIO commands on the handle.
         def _process_some_requests(nbd_handle):
@@ -476,7 +486,7 @@ class _PreCopyDisk(StateObject):
                                          _read_completed(f, b, o, e))
                     count += length
 
-                    _process_aio_requests(nbd_handle)
+                    _process_aio_requests(nbd_handle, keepalive)
 
         _wait_for_aio_commands_to_finish(nbd_handle)
 
@@ -824,7 +834,7 @@ class PreCopy(StateObject):
         ndisks = len(self.disks)
         for i, disk in enumerate(self.disks):
             logging.debug('Copying disk %d/%d', i, ndisks)
-            disk.copy(self.vmware.get_vm(), final)
+            disk.copy(self.vmware.get_vm(), final, self.vmware.keepalive)
 
         self._stop_nbdkits()
         self.vmware.clean_snapshot(final)

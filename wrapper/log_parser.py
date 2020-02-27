@@ -13,7 +13,7 @@ class OutputParser(object):
     COPY_DISK_RE = re.compile(br'.*Copying disk (\d+)/(\d+) to.*')
     DISK_PROGRESS_RE = re.compile(br'\s+\((\d+\.\d+)/100%\)')
     NBDKIT_DISK_PATH_RE = re.compile(
-        br'nbdkit: debug: Opening file (.*) \(.*\)')
+        br'nbdkit: .*: debug: Opening file (.*) \(.*\)')
     OVERLAY_SOURCE_RE = re.compile(
         br' *overlay source qemu URI: json:.*"file\.path": ?"([^"]+)"')
     OVERLAY_SOURCE2_RE = re.compile(

@@ -85,6 +85,13 @@ sh build.sh install
 %endif # %if 0%{ansible_only} == 0
 
 %changelog
+* Thu Feb 27 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.1.0-1
+- Wrapper changes
+  * Keep VMWare connection alive even during long copy
+  * fix waiting for volume loop on OpenStack
+  * Initial bits for warm conversion
+  * Change disk names in oVirt to match what ManageIQ likes
+
 * Wed Feb 19 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.0.4-1
 - Clean up deprecated lines from Ansible roles
 

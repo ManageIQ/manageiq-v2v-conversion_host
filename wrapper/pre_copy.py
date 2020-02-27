@@ -16,10 +16,6 @@ import xml.etree.ElementTree as ETree
 from collections import namedtuple
 from packaging import version
 from six.moves.urllib.parse import urlparse, unquote, parse_qs
-from pyVim.connect import SmartConnect, SmartConnectNoSSL, Disconnect
-from pyVim.task import WaitForTask
-# pylint: disable=no-name-in-module; dynamic module
-from pyVmomi import vim
 
 from .state import STATE, StateObject
 from .common import RUN_DIR, VDDK_LIBDIR, VDDK_LIBRARY_PATH
@@ -95,6 +91,7 @@ class _VMWare(object):
         '_password',
         'password_file',
         'port',
+        'pyvmomi',
         '_conn',
         'insecure',
         'thumbprint',
@@ -141,6 +138,9 @@ class _VMWare(object):
             else:
                 raise ValueError('Invalid value for "no_verify"')
 
+        from . import pyvmomi_wrapper
+        self.pyvmomi = pyvmomi_wrapper
+
     def _connect(self):
         "Connect to the remote VMWare server"
 
@@ -157,14 +157,14 @@ class _VMWare(object):
             connect_args['port'] = self.port
 
         if self.insecure:
-            self._conn = SmartConnectNoSSL(**connect_args)
+            self._conn = self.pyvmomi.SmartConnectNoSSL(**connect_args)
         else:
-            self._conn = SmartConnect(**connect_args)
+            self._conn = self.pyvmomi.SmartConnect(**connect_args)
 
     def _disconnect(self):
         if self._conn is None:
             return
-        Disconnect(self._conn)
+        self.pyvmomi.Disconnect(self._conn)
         self._conn = None
 
     def keepalive(self):
@@ -178,7 +178,7 @@ class _VMWare(object):
 
         view_mgr = self._conn.content.viewManager
         view = view_mgr.CreateContainerView(self._conn.content.rootFolder,
-                                            [vim.VirtualMachine],
+                                            [self.pyvmomi.vim.VirtualMachine],
                                             recursive=True)
         vms = [vm for vm in view.view if vm.name == self._vm_name]
         if len(vms) > 1:
@@ -210,11 +210,11 @@ class _VMWare(object):
 
     def get_disks_from_config(self, config):
         return [x for x in config.hardware.device
-                if isinstance(x, vim.vm.device.VirtualDisk)]
+                if isinstance(x, self.pyvmomi.vim.vm.device.VirtualDisk)]
 
     def get_disk_by_key(self, config, key):
-        disks = [x for x in config.hardware.device
-                 if isinstance(x, vim.vm.device.VirtualDisk) and x.key == key]
+        disks = [x for x in self.get_disks_from_config(config)
+                 if x.key == key]
         if len(disks) != 1:
             raise RuntimeError('Integrity error: '
                                'Number of disks with key %s: %d' %
@@ -224,13 +224,14 @@ class _VMWare(object):
     def create_snapshot(self):
         vm = self.get_vm()
         logging.debug('Creating snapshot to get a new change_id')
-        WaitForTask(vm.CreateSnapshot(name='v2v_cbt',
-                                      description='Snapshot to start CBT',
-                                      memory=False,
-                                      # The `quiesce` parameter can be False to
-                                      # make it slightly faster, but it should
-                                      # be first tested independently.
-                                      quiesce=True))
+        task = vm.CreateSnapshot(name='v2v_cbt',
+                                 description='Snapshot to start CBT',
+                                 memory=False,
+                                 # The `quiesce` parameter can be False to
+                                 # make it slightly faster, but it should
+                                 # be first tested independently.
+                                 quiesce=True)
+        self.pyvmomi.WaitForTask(task)
         # Update the VM data
         vm = self.get_vm()
         logging.debug('Snapshot created: %s', vm.snapshot.currentSnapshot)
@@ -253,7 +254,7 @@ class _VMWare(object):
 
         logging.debug('Removing snapshot %s%s',
                       snapshot, ' with children' if final else '')
-        WaitForTask(snapshot.RemoveSnapshot_Task(final))
+        self.pyvmomi.WaitForTask(snapshot.RemoveSnapshot_Task(final))
         logging.debug('Snapshot removed')
 
     def __del__(self):
@@ -550,6 +551,14 @@ class PreCopy(StateObject):
             raise RuntimeError('libnbd is too old (%s), '
                                'minimum version required is %s' %
                                (nbd_version, NBD_MIN_VERSION))
+
+        try:
+            from . import pyvmomi_wrapper
+            dir(pyvmomi_wrapper)
+        except ImportError:
+            raise RuntimeError('pyvmomi is not available, it is required for '
+                               'two-phase conversion')
+
         return super(PreCopy, cls).__new__(cls)
 
     def __init__(self, data):
@@ -587,8 +596,8 @@ class PreCopy(StateObject):
             logging.warning("VM should not have any previous snapshots")
 
         logging.info('Enabling CBT for the VM')
-        config_spec = vim.vm.ConfigSpec(changeTrackingEnabled=True)
-        WaitForTask(vm.Reconfigure(config_spec))
+        cs = self.vmware.pyvmomi.vim.vm.ConfigSpec(changeTrackingEnabled=True)
+        self.vmware.pyvmomi.WaitForTask(vm.Reconfigure(cs))
         logging.debug('CBT for the VM enabled')
 
         disks = self.vmware.get_disks_from_config(vm.config)
@@ -780,9 +789,8 @@ class PreCopy(StateObject):
     def _update_disk_data(self):
         vm = self.vmware.get_vm()
         snapshot = vm.snapshot.currentSnapshot
-        for device in snapshot.config.hardware.device:
-            if not isinstance(device, vim.vm.device.VirtualDisk):
-                continue
+        devices = self.vmware.get_disks_from_config(snapshot.config)
+        for device in devices:
             disk = [x for x in self.disks if x.key == device.key]
             config = self.vmware.get_vm().config
             orig_disk = self.vmware.get_disk_by_key(config, device.key)

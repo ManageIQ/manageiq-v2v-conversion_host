@@ -252,6 +252,7 @@ def main():
     STATE.machine_readable_log = os.path.join(LOG_DIR, 'virt-v2v-mr.log')
     STATE.wrapper_log = os.path.join(LOG_DIR, 'virt-v2v-wrapper.log')
     STATE.state_file = os.path.join(RUN_DIR, 'state.json')
+    STATE.write()
 
     log_format = '%(asctime)s:%(levelname)s:' \
         + ' %(message)s (%(module)s:%(lineno)d)'

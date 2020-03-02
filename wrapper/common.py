@@ -85,6 +85,12 @@ def hard_error(msg):
     logging.error(msg)
     sys.stderr.write(msg)
     sys.stderr.write('\n')
+    if STATE is not None and STATE.state_file is not None:
+        STATE.last_message = {
+            'message': msg,
+            'type': 'error'
+        }
+        STATE.write()
     sys.exit(1)
 
 

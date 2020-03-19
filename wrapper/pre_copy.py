@@ -581,7 +581,7 @@ class PreCopy(StateObject):
     def __del__(self):
         # This is mostly for tests, but neither the object nor the
         # TemporaryDirectory object should be used multiple times anyway.
-        if self._tmp_dir is not None:
+        if hasattr(self, '_tmp_dir') and self._tmp_dir is not None:
             self._tmp_dir.cleanup()
 
     def init_disk_data(self):

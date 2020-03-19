@@ -100,12 +100,6 @@ class _BaseHost(object):
         """ Validate input data, fill in defaults, etc """
         hard_error("Cannot validate data for unknown host type")
 
-    def prepare_disks(self, data):
-        """ Validate input data, fill in defaults, etc """
-        if data['two_phase']:
-            hard_error("Host implementation did not forbid two phase "
-                       "conversion, but did not implement `prepare_disks`")
-
 
 class KubevirtHost(_BaseHost):
 
@@ -178,14 +172,6 @@ class KubevirtHost(_BaseHost):
             })
             logging.debug('Updating progress in POD annotation')
             self._k8s.patch(json.dumps(patch))
-
-    def validate_data(self, data):
-        """ Validate input data, fill in defaults, etc """
-        if data['two_phase']:
-            # If adding support for two-phase conversion, do not forget to fix
-            # the update_progress() method
-            hard_error('Two-phase conversion is not supported for '
-                       'Kubevirt host')
 
 
 class _K8SCommunicator(object):

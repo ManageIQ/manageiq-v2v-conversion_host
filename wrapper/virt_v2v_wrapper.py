@@ -32,6 +32,8 @@ from .common import error, hard_error, log_command_safe, write_password
 from .common import setup_signals, disable_interrupt
 from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR, VIRT_V2V
 from .hosts import detect_host
+from .source_hosts import detect_source_host
+from .exports import export_nbd
 from .log_parser import log_parser
 from .checks import CHECKS
 from .pre_copy import PreCopy
@@ -252,6 +254,9 @@ def main():
 
     # Read and parse input -- hopefully this should be safe to do as root
     data = json.load(sys.stdin)
+    if 'nbd_export_only' in data:
+        export_nbd(data['nbd_export_only'])
+        sys.exit(0)
     host = detect_host(data)
 
     # The logging is delayed until we now which user runs the wrapper.
@@ -360,11 +365,23 @@ def main():
                 data, host.get_uid(), host.get_gid())
             if agent_pid is None:
                 raise RuntimeError('Failed to start ssh-agent')
+        source_host = detect_source_host(data, agent_sock)
+        if source_host:
+            try:
+                source_host.prepare_exports()
+            except Exception as e:
+                error_name = e.args[0] if e.args else "Wrapper failure"
+                error(error_name, 'Failed to prepare NBD exports!',
+                      exception=True)
+                source_host.close_exports()
+                STATE.failed = True
         if STATE.pre_copy:
             host.prepare_disks(data)
             STATE.pre_copy.copy_disks(data['vmware_password_file'])
         if not STATE.failed:
             wrapper(host, data, virt_v2v_caps, agent_sock)
+        if source_host:
+            source_host.close_exports()
         if agent_pid is not None:
             os.kill(agent_pid, signal.SIGTERM)
 

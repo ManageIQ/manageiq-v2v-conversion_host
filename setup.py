@@ -34,6 +34,7 @@ setup(
     ],
     extras_require={
         'ovirt': 'ovirt-engine-sdk-python',
+        'openstack': 'python-openstackclient',
     },
     # tests_require=[
     #     'tox',

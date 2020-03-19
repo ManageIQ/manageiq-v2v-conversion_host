@@ -148,6 +148,68 @@ Example:
         "luks_keys_vault": "/path_to/luks_key_vault.json"
     }
 
+### Openstack output
+
+To select the Openstack method add `osp_environment` to the configuration. Together
+with `osp_environment` some other keys need to be also specified.
+
+* `osp_environment`: all environment variables (with values) needed to connect
+  and authenticate to openstack (usually found in keystonerc file) with the
+  project in which the conversion host is running, which will be passed directly
+  to virt-v2v
+
+* `osp_destination_project_id`: ID of a project in which the VM should end up
+  after the conversion
+
+* `osp_flavor_id`: ID of the flavor of created VM
+
+* `osp_security_groups_ids`: array of IDs of all security groups to assign to the VM
+
+* `osp_server_id`: ID of the conversion VM
+
+* `insecure_connection`: optional, whether to verify certificates, default is
+  `false`
+
+Also the `network_mappings` array has to have a `mac_address` for each mapping.
+
+Example:
+
+    {
+        "vm_name": "My_Machine",
+
+        "osp_destination_project_id": "d159eb2e318f40d8a7b1ddd3edd5eb72",
+        "osp_flavor_id": "m1.small",
+        "osp_security_groups_ids": [],
+        "osp_server_id": "9d8da538-1bf6-429d-84de-5b0f9d0c5ed0",
+
+        "osp_environment": {
+            "OS_AUTH_URL": "https://auth.url:13000/v3",
+            "OS_PROJECT_ID": "c159eb2e318f40d8a7b1ddd3edd5eb73",
+            "OS_PROJECT_NAME": "prow_jekt",
+            "OS_USER_DOMAIN_NAME": "The_fault",
+            "OS_PROJECT_DOMAIN_ID": "D-folt",
+            "OS_USERNAME": "AzureDiamond",
+            "OS_PASSWORD": "hunter2",
+            "OS_REGION_NAME": "ree_johnUno",
+            "OS_INTERFACE": "pubLick",
+            "OS_IDENTITY_API_VERSION": 3
+        },
+
+        "insecure_connection": true,
+
+        "transport_method": "vddk",
+        "vmware_fingerprint": "1A:3F:26:C6:DC:2C:44:88:AA:33:81:3C:18:6E:5D:9F:C0:EE:DF:5C",
+        "vmware_uri": "esx://root@10.2.0.20?no_verify=1",
+        "vmware_password": "secret-password",
+        "network_mappings": [
+            {
+                "mac_address": "00:50:56:a6:ee:58",
+                "source": "VM Network",
+                "destination": "prow_jekt-network"
+            }
+        ],
+    }
+
 ## State File Format
 
 State file is a JSON file. Its content changes as the conversion goes through

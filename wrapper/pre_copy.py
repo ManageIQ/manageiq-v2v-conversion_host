@@ -840,7 +840,7 @@ class PreCopy(StateObject):
         self._start_nbdkits(final)
 
         ndisks = len(self.disks)
-        for i, disk in enumerate(self.disks):
+        for i, disk in enumerate(self.disks, start=1):
             logging.debug('Copying disk %d/%d', i, ndisks)
             disk.copy(self.vmware.get_vm(), final, self.vmware.keepalive)
 
@@ -856,7 +856,7 @@ class PreCopy(StateObject):
 
         ndisks = len(self.disks)
         cmd_templ = ['qemu-img', 'commit', '-p']
-        for i, disk in enumerate(self.disks):
+        for i, disk in enumerate(self.disks, start=1):
             logging.debug('Committing disk %d/%d', i, ndisks)
             cmd = cmd_templ + [disk.overlay]
             try:

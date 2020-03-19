@@ -47,6 +47,23 @@ class _BaseHost(object):
     def __init__(self):
         self._tag = '%s-%d' % (time.strftime('%Y%m%dT%H%M%S'), os.getpid())
 
+    def _wait_for_local_disks(self, paths):
+        logging.debug('Waiting for all disks to get plugged/noticed')
+        wait_for_paths = paths[:]
+        endt = time.time() + TIMEOUT
+        while wait_for_paths:
+            for path in wait_for_paths[:]:
+                if os.path.exists(path):
+                    add_perms_to_file(path,
+                                      stat.S_IRGRP | stat.S_IWGRP,
+                                      -1, self.get_gid())
+                    wait_for_paths.remove(path)
+            if wait_for_paths:
+                if endt < time.time():
+                    raise RuntimeError('Timed out waiting for disks '
+                                       'to get plugged/noticed')
+                time.sleep(1)
+
     # Interface
 
     def get_tag(self):
@@ -632,23 +649,6 @@ class OvirtHost(_BaseHost):
                 if endt < time.time():
                     raise RuntimeError('Timed out waiting for disks '
                                        'to become unlocked')
-                time.sleep(1)
-
-    def _wait_for_local_disks(self, paths):
-        logging.debug('Waiting for all disks to get plugged/noticed')
-        wait_for_paths = paths[:]
-        endt = time.time() + TIMEOUT
-        while wait_for_paths:
-            for path in wait_for_paths[:]:
-                if os.path.exists(path):
-                    add_perms_to_file(path,
-                                      stat.S_IRGRP | stat.S_IWGRP,
-                                      -1, self.get_gid())
-                    wait_for_paths.remove(path)
-            if wait_for_paths:
-                if endt < time.time():
-                    raise RuntimeError('Timed out waiting for disks '
-                                       'to get plugged/noticed')
                 time.sleep(1)
 
     def _create_disks(self, disks_service, data):

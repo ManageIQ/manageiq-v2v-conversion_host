@@ -639,17 +639,15 @@ class OvirtHost(_BaseHost):
         while wait_for_paths:
             for path in wait_for_paths[:]:
                 if os.path.exists(path):
+                    add_perms_to_file(path,
+                                      stat.S_IRGRP | stat.S_IWGRP,
+                                      -1, self.get_gid())
                     wait_for_paths.remove(path)
             if wait_for_paths:
                 if endt < time.time():
                     raise RuntimeError('Timed out waiting for disks '
                                        'to get plugged/noticed')
                 time.sleep(1)
-
-        for path in paths:
-            add_perms_to_file(path,
-                              stat.S_IRGRP | stat.S_IWGRP,
-                              -1, self.get_gid())
 
     def _create_disks(self, disks_service, data):
         if not STATE.pre_copy.disks:

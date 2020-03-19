@@ -6,6 +6,10 @@ python:
   - "3.8"
   - "3.9-dev"
 
+matrix:
+  allow_failures:
+    - python: "3.9-dev"
+
 ## TODO: Uncomment this when kubevirt tests are added
 # sudo: required
 # services:

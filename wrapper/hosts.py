@@ -8,7 +8,6 @@ import re
 import six
 import stat
 import subprocess
-import sys
 import time
 import uuid
 
@@ -459,14 +458,6 @@ class OpenstackHost(_BaseHost):
                 '-oo', 'verify-server-certificate=false'
                 ])
         return v2v_args, v2v_env
-
-    def set_user(self, data):
-        """ Possibly switch to different user """
-        # Check we are running as root
-        uid = os.geteuid()
-        if uid != 0:
-            sys.stderr.write('Need to run as root!\n')
-            sys.exit(1)
 
     def validate_data(self, data):
         """ Validate input data, fill in defaults, etc """

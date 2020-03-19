@@ -658,9 +658,9 @@ class OvirtHost(_BaseHost):
         elif data['output_format'] == 'qcow2':
             disk_format = self.sdk.types.DiskFormat.COW
 
-        for i, pc_disk in enumerate(STATE.pre_copy.disks):
+        for i, pc_disk in enumerate(STATE.pre_copy.disks, start=1):
             dt = datetime.datetime.now(datetime.timezone.utc).ctime()
-            name = '%s_Disk%d' % (data['vm_name'], i + 1)
+            name = '%s_Disk%d' % (data['vm_name'], i)
             logging.debug('Creating disk #%d: "%s"', i, name)
             disk = self.sdk.types.Disk(
                 name=name,
@@ -680,7 +680,7 @@ class OvirtHost(_BaseHost):
             # Adding it here so that it gets tried to be cleaned up even if
             # the timeout is reached
             d = disk.get()
-            self._created_disks.append(OvirtDisk(d.id, i))
+            self._created_disks.append(OvirtDisk(d.id, i - 1))
 
         self._wait_for_ovirt_disks(disks_service)
 
@@ -702,7 +702,7 @@ class OvirtHost(_BaseHost):
 
         disks_service = system_service.disks_service()
         ndisks = len(self._created_disks)
-        for i, v in enumerate(self._created_disks):
+        for i, v in enumerate(self._created_disks, start=1):
             logging.debug('Attaching disk %d/%d to the conversion VM',
                           i, ndisks)
             kwargs = arguments.copy()
@@ -724,7 +724,7 @@ class OvirtHost(_BaseHost):
         vms_service = conn.system_service().vms_service()
         vm = vms_service.vm_service(STATE.vm_id)
         das = vm.disk_attachments_service()
-        for i, att in enumerate(das.list()):
+        for i, att in enumerate(das.list(), start=1):
             logging.debug('Updating shareable state of disk #%d', i)
             disk = conn.follow_link(att.disk)
             att.disk = disk

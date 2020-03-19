@@ -40,6 +40,9 @@ def detect_host(data):
         raise ValueError("Cannot detect type of host")
 
 
+HostDisk = namedtuple('HostDisk', ['id', 'index'])
+
+
 class _BaseHost(object):
     def __init__(self):
         self._tag = '%s-%d' % (time.strftime('%Y%m%dT%H%M%S'), os.getpid())
@@ -555,7 +558,6 @@ class OpenstackHost(_BaseHost):
             return None
 
 
-OvirtDisk = namedtuple('OvirtDisk', ['id', 'index'])
 OvirtDiskAttachment = namedtuple('OvirtDiskAttachment', ['disk_id',
                                                          'attachment_id'])
 
@@ -680,7 +682,7 @@ class OvirtHost(_BaseHost):
             # Adding it here so that it gets tried to be cleaned up even if
             # the timeout is reached
             d = disk.get()
-            self._created_disks.append(OvirtDisk(d.id, i - 1))
+            self._created_disks.append(HostDisk(d.id, i - 1))
 
         self._wait_for_ovirt_disks(disks_service)
 

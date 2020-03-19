@@ -2,6 +2,7 @@
 import datetime
 import json
 import logging
+import math
 import os
 import pycurl
 import re
@@ -9,6 +10,7 @@ import six
 import stat
 import subprocess
 import time
+import tempfile
 import uuid
 
 from collections import namedtuple
@@ -18,6 +20,7 @@ from six.moves.urllib.parse import urlparse
 
 from .common import error, hard_error, log_command_safe, add_perms_to_file
 from .state import STATE
+from .osp_wrapper import osp_wrapper_create
 
 
 TIMEOUT = 300
@@ -237,9 +240,103 @@ class _K8SCommunicator(object):
 
 class OpenstackHost(_BaseHost):
 
+    def __init__(self):
+        super(OpenstackHost, self).__init__()
+
+        self._created_disks = []
+        self._attached_disks = []
+        self._tmp_dir = None
+
+    def __del__(self):
+        if hasattr(self, '_tmp_dir') and self._tmp_dir is not None:
+            self._tmp_dir.cleanup()
+
+    def _wait_for_disks(self, data):
+        endt = time.time() + TIMEOUT
+        wait_for_disks = self._created_disks[:]
+        args_templ = ['volume', 'show', '-f', 'value', '-c', 'status']
+        while wait_for_disks:
+            for disk in wait_for_disks[:]:
+                status = self._run_openstack(args_templ + [disk.id],
+                                             data).strip()
+                if status == 'creating':
+                    continue
+                if status == 'available':
+                    wait_for_disks.remove(disk)
+                    STATE.pre_copy.disks[disk.index].status = 'Created'
+                    STATE.write()
+                else:
+                    raise RuntimeError('Error creating volume, status=%s' %
+                                       status)
+
+            if wait_for_disks:
+                if endt < time.time():
+                    raise RuntimeError('Timed out waiting for volumes '
+                                       'to become available, ids=%r' %
+                                       wait_for_disks)
+                time.sleep(1)
+
+    def _create_disks(self, data):
+        if not STATE.pre_copy.disks:
+            RuntimeError('Looks like no disks were detected')
+
+        args_templ = ['volume', 'create',
+                      '-f', 'value', '-c', 'id',
+                      '--non-bootable', '--read-write',
+                      ]
+        if 'osp_volume_type_id' in data:
+            args_templ.extend([
+                '--type', data['osp_volume_type_id']
+            ])
+        for i, pc_disk in enumerate(STATE.pre_copy.disks, start=1):
+            size_gb = math.ceil(pc_disk.size / (1 << 30))
+            name = '%s_Disk%d' % (data['vm_name'], i)
+            logging.debug('Creating disk #%d: "%s"', i, name)
+            dt = datetime.datetime.now(datetime.timezone.utc).ctime()
+            description = 'Converted from VMware on %s' % dt
+            args = args_templ + [
+                '--size', str(size_gb),
+                '--description', description,
+                name
+            ]
+            disk_id = self._run_openstack(args, data).strip()
+            logging.debug('Created disk with ID=%r' % disk_id)
+            self._created_disks.append(HostDisk(disk_id, i - 1))
+
+        self._wait_for_disks(data)
+
+    def _attach_disks(self, data):
+        paths = []
+        args = ['server', 'add', 'volume', data['osp_server_id']]
+        ndisks = len(self._created_disks)
+        for i, v in enumerate(self._created_disks, start=1):
+            logging.debug('Attaching disk %d/%d to the conversion VM',
+                          i, ndisks)
+            self._run_openstack(args + [v.id], data)
+
+            self._attached_disks.append(v.id)
+            local_path = '/dev/disk/by-id/virtio-%s' % v.id[:20]
+            STATE.pre_copy.disks[v.index].local_path = local_path
+            paths.append(local_path)
+
+        self._wait_for_local_disks(paths)
+
+    def _detach_disks(self, data):
+        args = ['server', 'remove', 'volume', data['osp_server_id']]
+        for volume_id in self._attached_disks:
+            self._run_openstack(args + [volume_id], data)
+
+    def prepare_disks(self, data):
+        self._create_disks(data)
+        self._attach_disks(data)
+
     def handle_cleanup(self, data):
         """ Handle cleanup after failed conversion """
-        volumes = STATE.internal['disk_ids'].values()
+        if data['two_phase']:
+            volumes = self._attached_disks
+        else:
+            volumes = STATE.internal['disk_ids'].values()
+
         ports = STATE.internal['ports']
         # Remove attached volumes
         for v in volumes:
@@ -249,6 +346,10 @@ class OpenstackHost(_BaseHost):
                 v
             ]
             self._run_openstack(rm_args, data)
+
+        if data['two_phase']:
+            volumes = [x.id for x in self._created_disks]
+
         # Cancel transfers
         transfers = self._run_openstack([
             'volume', 'transfer', 'request', 'list',
@@ -303,20 +404,24 @@ class OpenstackHost(_BaseHost):
             error('Create VM failed')
             return
         volumes = []
-        # Build volume list
-        for k in sorted(STATE.internal['disk_ids'].keys()):
-            volumes.append(STATE.internal['disk_ids'][k])
-        if len(volumes) == 0:
-            STATE.failed = True
-            error('No volumes found!')
-            return
-        if len(volumes) != len(STATE.internal['disk_ids']):
-            STATE.failed = True
-            error('Detected duplicate indices of Cinder volumes')
-            logging.debug('Source volume map: %r',
-                          STATE.internal['disk_ids'])
-            logging.debug('Assumed volume list: %r', volumes)
-            return
+        if data['two_phase']:
+            self._detach_disks(data)
+            volumes = [x.id for x in self._created_disks]
+        else:
+            # Build volume list
+            for k in sorted(STATE.internal['disk_ids'].keys()):
+                volumes.append(STATE.internal['disk_ids'][k])
+            if len(volumes) == 0:
+                STATE.failed = True
+                error('No volumes found!')
+                return
+            if len(volumes) != len(STATE.internal['disk_ids']):
+                STATE.failed = True
+                error('Detected duplicate indices of Cinder volumes')
+                logging.debug('Source volume map: %r',
+                              STATE.internal['disk_ids'])
+                logging.debug('Assumed volume list: %r', volumes)
+                return
         for vol in volumes:
             logging.info('Transferring volume: %s', vol)
             # Checking if volume is in available state
@@ -439,6 +544,17 @@ class OpenstackHost(_BaseHost):
 
     def prepare_command(self, data, v2v_args, v2v_env, v2v_caps):
         """ Prepare virt-v2v command parts that are method dependent """
+        if data['two_phase']:
+            self._tmp_dir = tempfile.TemporaryDirectory(prefix='v2v-osp-')
+            osp_wrapper_create(self._tmp_dir.name,
+                               'openstack',
+                               [x.id for x in self._created_disks],
+                               -1, self.get_gid())
+            v2v_env['PATH'] = self._tmp_dir.name + os.pathsep + v2v_env['PATH']
+
+        logging.debug("attached paths are: %r" %
+                      [x.local_path for x in STATE.pre_copy.disks])
+
         v2v_args.extend([
             '-o', 'openstack',
             '-oo', 'server-id=%s' % data['osp_server_id'],
@@ -488,10 +604,13 @@ class OpenstackHost(_BaseHost):
         for mapping in data['network_mappings']:
             if 'mac_address' not in mapping:
                 hard_error('Missing mac address in one of network mappings')
-        if data['two_phase']:
-            hard_error('Two-phase conversion is not supported for '
-                       'Openstack host')
-        return data
+
+        servers = self._run_openstack(['server', 'list',
+                                       '-f', 'value', '-c', 'Name'],
+                                      data)
+        if data['vm_name'] in servers:
+            hard_error('VM with the name "%s" already exists on the '
+                       'destination' % data['vm_name'])
 
     def _check_ip_in_network(self, ipaddr, network):
         [netaddr, netsize] = network.split('/')

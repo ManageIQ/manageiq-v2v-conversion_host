@@ -279,6 +279,8 @@ def main():
 
     validate_data(host, data)
     if STATE.pre_copy:
+        if not hasattr(host, 'prepare_disks'):
+            hard_error("This output does not support two-phase conversion")
         STATE.pre_copy.init_disk_data()
 
     try:

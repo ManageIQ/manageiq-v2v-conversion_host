@@ -111,9 +111,8 @@ with `rhv_url` some other keys need to be also specified.
 
 * `rhv_storage`: name of the target storage domain
 
-* `insecure_connection`: optional, whether to verify peer certificates. For now
-  used only when connecting to oVirt/RHV. Default is `false`. The default path
-  for the CA certificates file is
+* `insecure_connection`: optional, whether to verify peer certificates. Default
+  is `false`. The default path for the CA certificates file is
   `/etc/pki/ca-trust/source/anchors/v2v-conversion-host-ca-bundle.pem`.
 
 Example:

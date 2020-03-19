@@ -542,7 +542,11 @@ class OpenstackHost(_BaseHost):
         command.extend(cmd)
         log_command_safe(command, {})
         try:
-            return subprocess.check_output(command, stderr=subprocess.STDOUT)
+            output = subprocess.run(command,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    universal_newlines=True,
+                                    check=True)
         except subprocess.CalledProcessError as e:
             # NOTE: Do NOT use logging.exception() here as it leaks passwords
             # into the log!
@@ -550,6 +554,11 @@ class OpenstackHost(_BaseHost):
                 'Command exited with non-zero return code %d, output:\n%s\n',
                 e.returncode, e.output)
             return None
+
+        if output.stderr:
+            logging.warn('Command ran successfully, but '
+                         'wrote some error to stderr:\n%s' % output.stderr)
+        return output.stdout
 
 
 OvirtDiskAttachment = namedtuple('OvirtDiskAttachment', ['disk_id',

@@ -379,7 +379,10 @@ def main():
             host.prepare_disks(data)
             STATE.pre_copy.copy_disks(data['vmware_password_file'])
         if not STATE.failed:
-            wrapper(host, data, virt_v2v_caps, agent_sock)
+            if source_host and source_host.avoid_wrapper(host):
+                source_host.transfer_exports(host)
+            else: # TODO: allow connecting source hosts to virt-v2v
+                wrapper(host, data, virt_v2v_caps, agent_sock)
         if source_host:
             source_host.close_exports()
         if agent_pid is not None:

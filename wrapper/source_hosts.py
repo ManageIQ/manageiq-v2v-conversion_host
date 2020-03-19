@@ -23,6 +23,10 @@ import subprocess
 import time
 from collections import namedtuple
 
+from .hosts import OpenstackHost
+from .state import STATE, Disk
+from .pre_copy import PreCopy
+
 
 NBD_READY_SENTINEL = 'nbdready' # Created when nbdkit exports are ready
 DEFAULT_TIMEOUT = 600           # Maximum wait for openstacksdk operations
@@ -30,6 +34,7 @@ DEFAULT_TIMEOUT = 600           # Maximum wait for openstacksdk operations
 # Lock to serialize volume attachments. This helps prevent device path
 # mismatches between the OpenStack SDK and /dev in the VM.
 ATTACH_LOCK_FILE_SOURCE = '/var/lock/v2v-source-volume-lock'
+ATTACH_LOCK_FILE_DESTINATION = '/var/lock/v2v-destination-volume-lock'
 
 # Local directory to copy logs from source conversion host
 SOURCE_LOGS_DIR = '/data/source_logs'
@@ -52,14 +57,27 @@ class _BaseSourceHost(object):
         """ Stops the nbdkit exports on the migration source. """
         logging.info('No cleanup needed for this migration source.')
 
+    def transfer_exports(self, host):
+        """ Performs a data copy to a destination host. """
+        logging.info('No transfer ability for this migration source.')
+
+    def avoid_wrapper(self, host):
+        """ Decide whether or not to avoid running virt-v2v. """
+        logging.info('No reason to avoid virt-v2v from this migration source.')
+        return True
+
 
 VolumeMapping = namedtuple('VolumeMapping',
     ['source_dev', # Device path (like /dev/vdb) on source conversion host
      'source_id', # Volume ID on source conversion host
+     'dest_dev', # Device path on destination conversion host
+     'dest_id', # Volume ID on destination conversion host
      'snap_id', # Root volumes need snapshot+new volume, so record snapshot ID
      'image_id', # Direct-from-image VMs create this temporary snapshot image
+     'name', # Save volume name so root volumes don't look weird on destination
      'size', # Volume size reported by OpenStack, in GB
-     'url' # Final NBD export address from source conversion host
+     'url', # Final NBD export address from source conversion host
+     'state' # STATE.Disk object for tracking progress
     ])
 class OpenStackSourceHost(_BaseSourceHost):
     """ Export volumes from an OpenStack instance. """
@@ -74,6 +92,19 @@ class OpenStackSourceHost(_BaseSourceHost):
         self.source_converter = osp_env['conversion_vm_id']
         self.source_instance = osp_env['vm_id']
         self.conn = openstack.connect(**osp_args)
+
+        # Create a connection to the destination cloud
+        osp_arg_list = ['os-auth_url', 'os-username', 'os-password',
+                        'os-project_name', 'os-project_domain_name',
+                        'os-user_domain_name']
+        osp_env = data['osp_environment']
+        osp_args = {arg[3:]: osp_env[arg] for arg in osp_arg_list} # Trim 'os-'
+        self.dest_converter = data['osp_server_id']
+        if 'insecure_connection' in data:
+            osp_args['verify'] = not data['insecure_connection']
+        else:
+            osp_args['verify'] = False
+        self.dest_conn = openstack.connect(**osp_args)
 
         self.agent_sock = agent_sock
         openstack.enable_logging() # Lots of openstacksdk messages without this
@@ -106,6 +137,19 @@ class OpenStackSourceHost(_BaseSourceHost):
         self._detach_volumes_from_converter()
         self._attach_data_volumes_to_source()
 
+    def transfer_exports(self, host):
+        self._create_destination_volumes()
+        self._attach_destination_volumes()
+        self._convert_destination_volumes()
+        self._detach_destination_volumes()
+
+    def avoid_wrapper(self, host):
+        """ Assume OpenStack to OpenStack migrations are always KVM to KVM. """
+        if isinstance(host, OpenstackHost):
+            logging.info('OpenStack->OpenStack migration, skipping virt-v2v.')
+            return True
+        return False
+
     def _source_vm(self):
         """
         Changes to the VM returned by get_server_by_id are not necessarily
@@ -116,6 +160,10 @@ class OpenStackSourceHost(_BaseSourceHost):
     def _converter(self):
         """ Same idea as _source_vm, for source conversion host. """
         return self.conn.get_server_by_id(self.source_converter)
+
+    def _destination(self):
+        """ Same idea as _source_vm, for destination conversion host. """
+        return self.dest_conn.get_server_by_id(self.dest_converter)
 
     def _ssh_args(self):
         """ Provide default set of SSH options. """
@@ -134,6 +182,13 @@ class OpenStackSourceHost(_BaseSourceHost):
         command.extend(['cloud-user@'+address])
         command.extend(args)
         return command, environment
+
+    def _destination_out(self, args):
+        """ Run a command on the dest conversion host and get the output. """
+        address = self._destination().accessIPv4
+        command, environment = self._ssh_cmd(address, args)
+        output = subprocess.check_output(command, env=environment)
+        return output.decode('utf-8').strip()
 
     def _converter_out(self, args):
         """ Run a command on the source conversion host and get the output. """
@@ -215,9 +270,14 @@ class OpenStackSourceHost(_BaseSourceHost):
                 logging.info('Volume is not in specified disk list, ignoring.')
                 continue
             dev_path = self._get_attachment(volume, sourcevm).device
+            disk = Disk(dev_path, 0)
             self.volume_map[dev_path] = VolumeMapping(source_dev=None,
-                source_id=volume.id, snap_id=None,
-                image_id=None, name=volume.name, size=volume.size, url=None)
+                source_id=volume.id, dest_dev=None, dest_id=None, snap_id=None,
+                image_id=None, name=volume.name, size=volume.size, url=None,
+                state=disk)
+            STATE.disks.append(disk)
+            logging.debug('STATE.disks is now %s', STATE.disks)
+            STATE.write()
 
     def _detach_data_volumes_from_source(self):
         """
@@ -266,10 +326,14 @@ class OpenStackSourceHost(_BaseSourceHost):
             volume = self.conn.create_volume(image=image.id, bootable=True,
                 wait=True, timeout=DEFAULT_TIMEOUT, size=image.min_disk,
                 name=image.name)
+            disk = Disk('/dev/vda', 0)
             self.volume_map['/dev/vda'] = VolumeMapping(source_dev=None,
-                source_id=volume.id, snap_id=None,
+                source_id=volume.id, dest_dev=None, dest_id=None, snap_id=None,
                 image_id=image.id, name=volume.name, size=volume.size,
-                url=None)
+                url=None, state=disk)
+            STATE.disks.append(disk)
+            logging.debug('STATE.disks is now %s', STATE.disks)
+            STATE.write()
         else:
             raise RuntimeError('No known boot device found for this instance!')
 
@@ -575,3 +639,115 @@ class OpenStackSourceHost(_BaseSourceHost):
                     logging.info('Volume %s is already attached to source VM',
                         volume.id)
                     continue
+
+    def _create_destination_volumes(self):
+        """
+        Volume mapping step 5: create new volumes on the destination OpenStack,
+        and fill in dest_id with the new volumes.
+        """
+        logging.info('Creating volumes on destination cloud')
+        for path, mapping in self.volume_map.items():
+            volume_id = mapping.source_id
+            volume = self.conn.get_volume_by_id(volume_id)
+            new_volume = self.dest_conn.create_volume(name=mapping.name,
+                bootable=volume.bootable, description=volume.description,
+                size=volume.size, wait=True, timeout=DEFAULT_TIMEOUT)
+            self.volume_map[path] = mapping._replace(dest_id=new_volume.id)
+            STATE.internal['disk_ids'][path] = new_volume.id
+        STATE.write()
+
+    @_use_lock(ATTACH_LOCK_FILE_DESTINATION)
+    def _attach_destination_volumes(self):
+        """
+        Volume mapping step 6: attach the new destination volumes to the
+        destination conversion host. Fill in the destination device name.
+        """
+        def update_dest(volume_mapping, dev_path):
+            return volume_mapping._replace(dest_dev=dev_path)
+        def volume_id(volume_mapping):
+            return volume_mapping.dest_id
+        self._attach_volumes(self.dest_conn, self._destination, 'destination',
+            self._destination_out, update_dest, volume_id)
+
+    def _convert_destination_volumes(self):
+        """
+        Finally run the commands to copy the exported source volumes to the
+        local destination volumes. Attempt to sparsify the volumes to minimize
+        the amount of data sent over the network.
+        """
+        logging.info('Converting volumes...')
+        for path, mapping in self.volume_map.items():
+            logging.info('Converting source VM\'s %s: %s', path, str(mapping))
+            overlay = '/tmp/'+os.path.basename(mapping.dest_dev)+'.qcow2'
+
+            def _log_convert(source_disk, source_format):
+                """ Write qemu-img convert progress to the wrapper log. """
+                logging.info('Copying volume data...')
+                cmd = ['qemu-img', 'convert', '-p', '-f', source_format, '-O',
+                        'host_device', source_disk, mapping.dest_dev]
+                # Non-blocking output processing stolen from pre_copy.py
+                img_sub = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                    universal_newlines=True, bufsize=1)
+                flags = fcntl.fcntl(img_sub.stdout, fcntl.F_GETFL)
+                flags |= os.O_NONBLOCK
+                fcntl.fcntl(img_sub.stdout, fcntl.F_SETFL, flags)
+                while img_sub.poll() is None:
+                    try:
+                        line = img_sub.stdout.readline()
+                    except OSError as err:
+                        if err.errno != errno.EAGAIN:
+                            raise
+                    if line:
+                        matches = PreCopy.qemu_progress_re.search(line)
+                        if matches is not None:
+                            mapping.state.progress = float(matches.group(1))
+                            STATE.write()
+                    else:
+                        time.sleep(1)
+                logging.info('Conversion return code: %d', img_sub.returncode)
+                if img_sub.returncode != 0:
+                    raise RuntimeError('Failed to convert volume!')
+                else: # Just in case qemu-img returned before readline got 100%
+                    mapping.state.progress = 100.0
+                    STATE.write()
+
+            try:
+                logging.info('Attempting initial sparsify...')
+                environment = os.environ.copy()
+                environment['LIBGUESTFS_BACKEND'] = 'direct'
+
+                cmd = ['qemu-img', 'create', '-f', 'qcow2', '-b', mapping.url,
+                    overlay]
+                out = subprocess.check_output(cmd)
+                logging.info('Overlay output: %s', out)
+                logging.info('Overlay size: %s', str(os.path.getsize(overlay)))
+
+                cmd = ['virt-sparsify', '--in-place', overlay]
+                with open(STATE.wrapper_log, 'a') as log_fd:
+                    img_sub = subprocess.Popen(cmd,
+                        stdout=log_fd,
+                        stderr=subprocess.STDOUT,
+                        stdin=subprocess.DEVNULL,
+                        env=environment)
+                    returncode = img_sub.wait()
+                    logging.info('Sparsify return code: %d', returncode)
+                    if returncode != 0:
+                        raise RuntimeError('Failed to convert volume!')
+
+                _log_convert(overlay, 'qcow2')
+            except Exception as error:
+                logging.info('Sparsify failed, converting whole device...')
+                if os.path.isfile(overlay):
+                    os.remove(overlay)
+                _log_convert(mapping.url, 'raw')
+
+    @_use_lock(ATTACH_LOCK_FILE_DESTINATION)
+    def _detach_destination_volumes(self):
+        """ Disconnect new volumes from destination conversion host. """
+        logging.info('Detaching volumes from destination wrapper.')
+        for path, mapping in self.volume_map.items():
+            volume_id = mapping.dest_id
+            volume = self.dest_conn.get_volume_by_id(volume_id)
+            self.dest_conn.detach_volume(volume=volume, wait=True,
+                server=self._destination(), timeout=DEFAULT_TIMEOUT)

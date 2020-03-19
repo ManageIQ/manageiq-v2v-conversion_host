@@ -334,7 +334,7 @@ class OpenstackHost(_BaseHost):
                 logging.info('Current volume state: %s.', volume_state)
                 if volume_state == 'available':
                     logging.info(
-                        'Volume detached in %s second(s), trasferring.',
+                        'Volume detached in %s second(s), transferring.',
                         int(time.time() - start_at))
                     is_available = True
                     break

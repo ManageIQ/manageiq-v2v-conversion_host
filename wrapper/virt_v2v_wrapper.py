@@ -381,7 +381,7 @@ def main():
         if not STATE.failed:
             if source_host and source_host.avoid_wrapper(host):
                 source_host.transfer_exports(host)
-            else: # TODO: allow connecting source hosts to virt-v2v
+            else:  # TODO: allow connecting source hosts to virt-v2v
                 wrapper(host, data, virt_v2v_caps, agent_sock)
         if source_host:
             source_host.close_exports()

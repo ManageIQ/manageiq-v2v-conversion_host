@@ -13,7 +13,6 @@ the nbd_export_only JSON, which will run a function in this module to manage
 the actual nbdkit exports.
 """
 
-import json
 import logging
 import os
 import signal

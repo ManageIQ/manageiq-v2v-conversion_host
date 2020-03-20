@@ -38,7 +38,7 @@ script:
   - tox -p all
   # Try to generate dist package. We should in fact try to do a complete build,
   # but that's larger task. For now this should do.
-  - ./build.sh dist
+  - bash -x ./build.sh dist
   ## TODO: Test kubevirt containers
   # - cd kubevirt-provider/ && docker build -t v2v-conversion-host .
   # - docker run --detach --publish 8080:8080 v2v-conversion-host

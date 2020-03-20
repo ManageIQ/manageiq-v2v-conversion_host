@@ -512,7 +512,6 @@ class _PreCopyDisk(StateObject):
 class PreCopy(StateObject):
     __slots__ = [
         '_tmp_dir',
-        '_tmp_dir_path',
         'vmware',
         '_vmware_password_file',
         'warm',
@@ -525,7 +524,6 @@ class PreCopy(StateObject):
 
     _hidden = [
         '_tmp_dir',
-        '_tmp_dir_path',
         'vmware',
         '_vmware_password_file',
         'warm',
@@ -565,9 +563,7 @@ class PreCopy(StateObject):
         import nbd
         self.nbd = nbd
 
-        self.output_format = data['output_format']
         self._tmp_dir = tempfile.TemporaryDirectory(prefix='v2v-')
-        self._tmp_dir_path = self._tmp_dir.name
 
         self.disks = None
 
@@ -580,7 +576,7 @@ class PreCopy(StateObject):
             raise RuntimeError('Invalid value for `iteration_seconds`')
 
         # Let others browse it
-        add_perms_to_file(self._tmp_dir_path, stat.S_IXOTH, -1, -1)
+        add_perms_to_file(self._tmp_dir.name, stat.S_IXOTH, -1, -1)
 
     def __del__(self):
         # This is mostly for tests, but neither the object nor the
@@ -602,7 +598,7 @@ class PreCopy(StateObject):
 
         disks = self.vmware.get_disks_from_config(vm.config)
 
-        self.disks = [_PreCopyDisk(self.nbd, d, self._tmp_dir_path)
+        self.disks = [_PreCopyDisk(self.nbd, d, self._tmp_dir.name)
                       for d in disks]
         STATE.disks = self.disks
         STATE.write()
@@ -650,7 +646,7 @@ class PreCopy(StateObject):
         return ETree.tostring(tree)
 
     def get_xml(self):
-        xmlfile = os.path.join(self._tmp_dir_path, 'vm.xml')
+        xmlfile = os.path.join(self._tmp_dir.name, 'vm.xml')
         with open(xmlfile, 'wb') as f:
             f.write(self._fix_disks(self.vmware.get_domxml()))
         return xmlfile
@@ -797,7 +793,7 @@ class PreCopy(StateObject):
             if not disk:
                 # Start tracking the disk now
                 self.disks.append(_PreCopyDisk(self.nbd, orig_disk,
-                                               self._tmp_dir_path))
+                                               self._tmp_dir.name))
             elif len(disk) == 1:
                 disk[0].update_change_ids(orig_disk, device, snapshot)
             else:

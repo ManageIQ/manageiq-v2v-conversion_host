@@ -521,6 +521,7 @@ class PreCopy(StateObject):
         '_cutover_path',
         '_iteration_seconds',
         '_copy_trigger_path',
+        '_pause_path',
 
         'disks',
     ]
@@ -533,6 +534,7 @@ class PreCopy(StateObject):
         '_cutover_path',
         '_iteration_seconds',
         '_copy_trigger_path',
+        '_pause_path',
     ]
 
     qemu_progress_re = re.compile(r'\((\d+\.\d+)/100%\)')
@@ -577,6 +579,7 @@ class PreCopy(StateObject):
         self._iteration_seconds = int(data.get('iteration_seconds', 3600))
         if self._iteration_seconds < 0:
             raise RuntimeError('Invalid value for `iteration_seconds`')
+        self._pause_path = os.path.join(RUN_DIR, 'pause_operations')
 
         # Let others browse it
         add_perms_to_file(self._tmp_dir.name, stat.S_IXOTH, -1, -1)
@@ -813,6 +816,16 @@ class PreCopy(StateObject):
         endt = time.time() + self._iteration_seconds
         while endt > time.time():
             self.vmware.keepalive()
+
+            if os.path.exists(self._pause_path):
+                logging.debug('Pausing operations because pause file exists')
+                STATE.status = 'Paused'
+                STATE.write()
+                while os.path.exists(self._pause_path):
+                    time.sleep(5)
+                logging.debug('Pause file is gone, resuming')
+                STATE.status = 'Waiting'
+                STATE.write()
 
             if os.path.exists(self._cutover_path):
                 logging.debug('Found file notifying end of the '

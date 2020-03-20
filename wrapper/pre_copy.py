@@ -24,7 +24,7 @@ from .common import add_perms_to_file, error, nbd_uri_from_unix_socket
 
 _TIMEOUT = 10
 
-NBD_MIN_VERSION = version.parse("1.0.0")
+NBD_MIN_VERSION = version.parse('1.0.0')
 NBD_AIO_MAX_IN_FLIGHT = 4
 
 MAX_BLOCK_STATUS_LEN = 2 << 30  # 2GB (4GB requests fail over the 32b protocol)
@@ -337,7 +337,7 @@ class _PreCopyDisk(StateObject):
 
         self.commit_progress = None
 
-        self.copies = [CopyIterationData("*", disk.backing.fileName)]
+        self.copies = [CopyIterationData('*', disk.backing.fileName)]
 
     def copy_ref(self, final):
         return self.copies[-1 if final else -2]
@@ -382,7 +382,7 @@ class _PreCopyDisk(StateObject):
         STATE.write()
 
         nbd_handle = self.nbd.NBD()
-        nbd_handle.add_meta_context("base:allocation")
+        nbd_handle.add_meta_context('base:allocation')
         nbd_handle.connect_uri(nbd_uri_from_unix_socket(self.sock))
         fd = os.open(self.local_path, os.O_WRONLY)
 
@@ -504,7 +504,7 @@ class _PreCopyDisk(StateObject):
         if change_id is None:
             raise RuntimeError('Missing changeId for a disk')
 
-        logging.debug("New changeId=%s", change_id)
+        logging.debug('New changeId=%s', change_id)
         self.copies.append(CopyIterationData(change_id, new_filename))
         STATE.write()
 
@@ -589,7 +589,7 @@ class PreCopy(StateObject):
 
         vm = self.vmware.get_vm()
         if vm.snapshot:
-            logging.warning("VM should not have any previous snapshots")
+            logging.warning('VM should not have any previous snapshots')
 
         logging.info('Enabling CBT for the VM')
         cs = self.vmware.pyvmomi.vim.vm.ConfigSpec(changeTrackingEnabled=True)

@@ -67,6 +67,7 @@ class _State(StateObject):
         'pre_copy',
         'return_code',
         'started',
+        'status',
         'vm_id',
     ]
 
@@ -108,6 +109,7 @@ class _State(StateObject):
         self.return_code = None
         self.vm_id = None
         self.wrapper_log = None
+        self.status = None
 
     def write(self):
         tmp_state = tempfile.mkstemp(suffix='.v2v.state',

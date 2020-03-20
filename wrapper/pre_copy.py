@@ -24,7 +24,7 @@ from .common import add_perms_to_file, error, nbd_uri_from_unix_socket
 
 _TIMEOUT = 10
 
-NBD_MIN_VERSION = version.parse("1.0.0")
+NBD_MIN_VERSION = version.parse('1.0.0')
 NBD_AIO_MAX_IN_FLIGHT = 4
 
 MAX_BLOCK_STATUS_LEN = 2 << 30  # 2GB (4GB requests fail over the 32b protocol)
@@ -272,6 +272,9 @@ class CopyIterationData(StateObject):
 
         'start_time',
         'end_time',
+
+        'status',
+        'error',
     ]
 
     _hidden = [
@@ -288,6 +291,8 @@ class CopyIterationData(StateObject):
 
         self.start_time = None
         self.end_time = None
+        self.status = 'Prepared'
+        self.error = None
 
 
 class _PreCopyDisk(StateObject):
@@ -337,7 +342,7 @@ class _PreCopyDisk(StateObject):
 
         self.commit_progress = None
 
-        self.copies = [CopyIterationData("*", disk.backing.fileName)]
+        self.copies = [CopyIterationData('*', disk.backing.fileName)]
 
     def copy_ref(self, final):
         return self.copies[-1 if final else -2]
@@ -362,7 +367,7 @@ class _PreCopyDisk(StateObject):
     def copy(self, vm, final, keepalive=None):
         copy = self.copy_ref(final)
         copy.start_time = time.time()
-        self.status = 'Copying (getting extent information)'
+        copy.status = 'Connected'
         STATE.write()
 
         self.get_extents(vm, final)
@@ -374,21 +379,18 @@ class _PreCopyDisk(StateObject):
                 self.copies[-2].path = None
                 self.copies[-2].change_id = None
                 self.copies[-3].snapshot = None
-            self.status = 'Copied'
-            STATE.write()
             return
 
-        self.status = 'Copying (connecting)'
-        STATE.write()
-
         nbd_handle = self.nbd.NBD()
-        nbd_handle.add_meta_context("base:allocation")
+        nbd_handle.add_meta_context('base:allocation')
         nbd_handle.connect_uri(nbd_uri_from_unix_socket(self.sock))
         fd = os.open(self.local_path, os.O_WRONLY)
 
         try:
+            copy.status = 'Copying'
+            STATE.write()
             self._copy_all(nbd_handle, fd, final, keepalive)
-            self.status = 'Copied'
+            copy.status = 'Copied'
             copy.end_time = time.time()
             if not final and len(self.copies) > 2:
                 self.copies[-2].path = None
@@ -396,7 +398,8 @@ class _PreCopyDisk(StateObject):
                 self.copies[-3].snapshot = None
             STATE.write()
         except Exception:
-            self.status = 'Failed during copy'
+            self.status = 'Unrecoverable error during copy'
+            copy.error = True
             STATE.write()
 
             # TODO: asdf: figure out when do we try to recover
@@ -462,7 +465,7 @@ class _PreCopyDisk(StateObject):
                           self.logname)
             return
 
-        self.status = 'Copying'
+        copy.status = 'Copying'
         STATE.write()
 
         logging.debug('Copying %d B of data', copy.to_copy)
@@ -504,7 +507,7 @@ class _PreCopyDisk(StateObject):
         if change_id is None:
             raise RuntimeError('Missing changeId for a disk')
 
-        logging.debug("New changeId=%s", change_id)
+        logging.debug('Disk "%s" has new changeId=%s', self.logname, change_id)
         self.copies.append(CopyIterationData(change_id, new_filename))
         STATE.write()
 
@@ -518,6 +521,7 @@ class PreCopy(StateObject):
         '_cutover_path',
         '_iteration_seconds',
         '_copy_trigger_path',
+        '_pause_path',
 
         'disks',
     ]
@@ -530,6 +534,7 @@ class PreCopy(StateObject):
         '_cutover_path',
         '_iteration_seconds',
         '_copy_trigger_path',
+        '_pause_path',
     ]
 
     qemu_progress_re = re.compile(r'\((\d+\.\d+)/100%\)')
@@ -574,6 +579,7 @@ class PreCopy(StateObject):
         self._iteration_seconds = int(data.get('iteration_seconds', 3600))
         if self._iteration_seconds < 0:
             raise RuntimeError('Invalid value for `iteration_seconds`')
+        self._pause_path = os.path.join(RUN_DIR, 'pause_operations')
 
         # Let others browse it
         add_perms_to_file(self._tmp_dir.name, stat.S_IXOTH, -1, -1)
@@ -587,9 +593,12 @@ class PreCopy(StateObject):
     def init_disk_data(self):
         "Updates data about disks in the remote VM"
 
+        STATE.status = 'Preparing'
+        STATE.write()
+
         vm = self.vmware.get_vm()
         if vm.snapshot:
-            logging.warning("VM should not have any previous snapshots")
+            logging.warning('VM should not have any previous snapshots')
 
         logging.info('Enabling CBT for the VM')
         cs = self.vmware.pyvmomi.vim.vm.ConfigSpec(changeTrackingEnabled=True)
@@ -801,9 +810,22 @@ class PreCopy(StateObject):
                                    'the same key, which should be unique!')
 
     def _wait_for_triggers(self):
+        STATE.status = 'Waiting'
+        STATE.write()
+
         endt = time.time() + self._iteration_seconds
         while endt > time.time():
             self.vmware.keepalive()
+
+            if os.path.exists(self._pause_path):
+                logging.debug('Pausing operations because pause file exists')
+                STATE.status = 'Paused'
+                STATE.write()
+                while os.path.exists(self._pause_path):
+                    time.sleep(5)
+                logging.debug('Pause file is gone, resuming')
+                STATE.status = 'Waiting'
+                STATE.write()
 
             if os.path.exists(self._cutover_path):
                 logging.debug('Found file notifying end of the '
@@ -820,11 +842,18 @@ class PreCopy(StateObject):
 
         self._vmware_password_file = vmware_password_file
 
+        iteration = 0
         while self.warm:
+            STATE.status = 'Pre-copy #%d' % iteration
+            STATE.write()
+            iteration += 1
             self.vmware.create_snapshot()
             self._update_disk_data()
             self._copy_iteration(final=False)
             self._wait_for_triggers()
+
+        STATE.status = 'Pre-copy #%d (last)' % iteration
+        STATE.write()
 
         if self.vmware.get_vm().runtime.powerState != 'poweredOff':
             raise RuntimeError('Cannot perform final copy for running VM')
@@ -842,6 +871,10 @@ class PreCopy(StateObject):
 
         self._stop_nbdkits()
         self.vmware.clean_snapshot(final)
+
+        for disk in self.disks:
+            if disk.status == 'Copied':
+                disk.status = 'Done'
 
     def commit_overlays(self):
         "Commit all overlays to local disks."

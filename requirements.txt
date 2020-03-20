@@ -9,3 +9,4 @@ libvirt-python
 pyvmomi
 packaging
 python-openstackclient
+openstacksdk

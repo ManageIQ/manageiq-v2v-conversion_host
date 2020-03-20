@@ -24,6 +24,7 @@ setup(
     install_requires=[
         'pycurl',
         'libvirt-python',
+        'openstacksdk',
         'pyvmomi',
         'packaging',
         # TODO: Uncomment this when it becomes available in pypi and also do

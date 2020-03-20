@@ -33,7 +33,7 @@ env:
     - TOX_PARALLEL_NO_SPINNER=1
 
 script:
-  - ./build.sh prep
+  - bash -x ./build.sh prep
   # Run syntax checks and linters
   - tox -p all
   # Try to generate dist package. We should in fact try to do a complete build,

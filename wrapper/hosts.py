@@ -554,15 +554,10 @@ class OpenstackHost(_BaseHost):
                 'Command exited with non-zero return code %d, output:\n%s\n',
                 e.returncode, e.output)
             return None
-
         if output.stderr:
             logging.warn('Command ran successfully, but '
                          'wrote some error to stderr:\n%s' % output.stderr)
         return output.stdout
-
-
-OvirtDiskAttachment = namedtuple('OvirtDiskAttachment', ['disk_id',
-                                                         'attachment_id'])
 
 
 class OvirtHost(_BaseHost):

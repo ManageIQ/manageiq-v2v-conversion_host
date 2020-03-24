@@ -85,6 +85,15 @@ sh build.sh install
 %endif # %if 0%{ansible_only} == 0
 
 %changelog
+* Tue Mar 24 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.2.0-1
+- Wrapper changes:
+  * make pyvmomi optional -- it is only needed for two-phase and warm migration (#28)
+  * fix disk copying progress with newer virt-v2v (#29)
+  * support for two-phase migration to OpenStack (#31)
+  * support for pausing pre-copy phase in two-phase and warm migration (#38)
+- Kubevirt Provider changes:
+  * add support for oVirt as a source (#32)
+
 * Thu Feb 27 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.1.0-1
 - Wrapper changes
   * Keep VMWare connection alive even during long copy

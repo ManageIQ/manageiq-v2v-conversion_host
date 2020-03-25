@@ -63,9 +63,9 @@ def prepare_command(data, v2v_caps, agent_sock=None):
             '--no-copy',
         ])
     else:
-        v2v_args.append(data['vm_name'])
         if data['transport_method'] == 'vddk':
             v2v_args.extend([
+                data['vm_name'],
                 '-i', 'libvirt',
                 '-ic', data['vmware_uri'],
                 '-it', 'vddk',
@@ -75,6 +75,7 @@ def prepare_command(data, v2v_caps, agent_sock=None):
             ])
         elif data['transport_method'] == 'ssh':
             v2v_args.extend([
+                data['vmware_uri'],
                 '-i', 'vmx',
                 '-it', 'ssh',
             ])

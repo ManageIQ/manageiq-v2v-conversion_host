@@ -114,7 +114,7 @@ class _VMWare(object):
 
         self.server = uri.hostname
         self.port = uri.port
-        self.user = 'administrator@vsphere.local'
+        self.user = 'root'
         self._password = data['vmware_password']
         self.thumbprint = data['vmware_fingerprint']
         if uri.username:
@@ -137,6 +137,8 @@ class _VMWare(object):
                 self.insecure = False
             else:
                 raise ValueError('Invalid value for "no_verify"')
+        elif data['transport_method'] == 'ssh':
+            self.insecure = True
 
         from . import pyvmomi_wrapper
         self.pyvmomi = pyvmomi_wrapper
@@ -202,7 +204,13 @@ class _VMWare(object):
 
         cred_info = [[libvirt.VIR_CRED_AUTHNAME, libvirt.VIR_CRED_PASSPHRASE],
                      auth_cb, None]
-        conn = libvirt.openAuth(self._uri, cred_info)
+
+        if re.compile('^ssh://').match(self._uri):
+            uri = "esx://%s@%s/?no_verify=1" % (self.user, self.server)
+        else:
+            uri = self._uri
+
+        conn = libvirt.openAuth(uri, cred_info)
         domxml = conn.lookupByName(self._vm_name).XMLDesc()
         logging.debug('Fetched domxml: \n%s', domxml)
 
@@ -305,6 +313,7 @@ class _PreCopyDisk(StateObject):
         'local_path',  # Path on local filesystem
         'overlay',  # Path to the local overlay
         'path',  # The VMWare-reported path (on the host)
+        'absolute_path',  # The absolute disk path on VMware host
         'pidfile',  # nbdkit's pidfile path
         'proc_nbdkit',  # nbdkit process
         'proc_qemu',  # nbdkit process
@@ -339,6 +348,12 @@ class _PreCopyDisk(StateObject):
         self.proc_nbdkit = None
         self.proc_qemu = None
         self.overlay = None
+
+        datastore = disk.backing.datastore
+        datastore_mountpoint = datastore.summary.url.replace("ds://", "")
+        self.absolute_path = "%s/%s" % (
+                datastore_mountpoint,
+                disk.backing.fileName.replace("[%s] " % datastore.name, ""))
 
         self.commit_progress = None
 
@@ -517,6 +532,7 @@ class PreCopy(StateObject):
         '_tmp_dir',
         'vmware',
         '_vmware_password_file',
+        '_transport_method',
         'warm',
         '_cutover_path',
         '_iteration_seconds',
@@ -573,6 +589,7 @@ class PreCopy(StateObject):
         self.disks = None
 
         self.vmware = _VMWare(data)
+        self._transport_method = data['transport_method']
         self.warm = data['warm']
         self._cutover_path = os.path.join(RUN_DIR, 'cutover')
         self._copy_trigger_path = os.path.join(RUN_DIR, 'copy_trigger')
@@ -660,7 +677,7 @@ class PreCopy(StateObject):
             f.write(self._fix_disks(self.vmware.get_domxml()))
         return xmlfile
 
-    def _get_nbdkit_cmd(self, disk, filters, final):
+    def _get_nbdkit_cmd_vmdk(self, disk, filters, final):
         env = 'LD_LIBRARY_PATH=%s' % VDDK_LIBRARY_PATH
         if 'LD_LIBRARY_PATH' in os.environ:
             env += ':' + os.environ['LD_LIBRARY_PATH']
@@ -698,6 +715,36 @@ class PreCopy(StateObject):
 
         return nbdkit_cmd
 
+    def _get_nbdkit_cmd_ssh(self, disk, filters, final):
+        print("*** %s" % disk.absolute_path.replace('.vmdk', '-flat.vmdk'))
+        nbdkit_cmd = [
+            'nbdkit',
+            '-v',
+            '-U', disk.sock,
+            '-P', disk.pidfile,
+            '--exit-with-parent',
+            '--readonly',
+            '--foreground',
+            '--exportname=/',
+        ] + [
+            '--filter=' + f for f in filters
+        ] + [
+            '--filter=log',
+            'ssh',
+            # pylint: disable=protected-access
+            'host=%s' % self.vmware.server,
+            'password=+%s' % self._vmware_password_file,
+            'path=%s' % disk.absolute_path.replace('.vmdk', '-flat.vmdk'),
+        ]
+        if self.vmware.user:
+            nbdkit_cmd.append('user=%s' % self.vmware.user)
+        nbdkit_cmd.extend([
+            'logfile=%s' % STATE.wrapper_log,
+            'logappend=true',
+        ])
+
+        return nbdkit_cmd
+
     def _start_nbdkits(self, final):
         paths = []
         filters = ['cacheextents', 'retry']
@@ -716,7 +763,8 @@ class PreCopy(StateObject):
                 filters.remove(filt)
 
         for disk in self.disks:
-            cmd = self._get_nbdkit_cmd(disk, filters, final)
+            cmd = getattr(self, "_get_nbdkit_cmd_%s" % self._transport_method)(
+                    disk, filters, final)
             logging.debug('Starting nbdkit: %s', cmd)
             log_fd = open(STATE.wrapper_log, 'a')
             disk.proc_nbdkit = subprocess.Popen(cmd,

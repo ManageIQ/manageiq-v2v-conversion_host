@@ -8,6 +8,8 @@ persistent=no
 suggestion-mode=yes
 extension-pkg-whitelist=pycurl
 
+max-module-lines=1500
+
 [MESSAGES CONTROL]
 disable=arguments-differ,
         attribute-defined-outside-init,

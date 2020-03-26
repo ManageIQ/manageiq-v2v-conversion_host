@@ -205,7 +205,7 @@ class _VMWare(object):
         cred_info = [[libvirt.VIR_CRED_AUTHNAME, libvirt.VIR_CRED_PASSPHRASE],
                      auth_cb, None]
 
-        if re.compile('^ssh://').match(self._uri):
+        if self._uri.startswith('ssh://'):
             uri = "esx://%s@%s/?no_verify=1" % (self.user, self.server)
         else:
             uri = self._uri

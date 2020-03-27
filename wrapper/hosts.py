@@ -23,7 +23,7 @@ from .state import STATE
 from .osp_wrapper import osp_wrapper_create
 
 
-TIMEOUT = 300
+TIMEOUT = 600
 
 
 # NOTE: This in reality binds output method (rhv-upload, openstack) to the

@@ -114,7 +114,10 @@ class _VMWare(object):
 
         self.server = uri.hostname
         self.port = uri.port
-        self.user = 'root'
+        if self._uri.startswith('vpx://'):
+            self.user = 'administrator@vsphere.local'
+        else:
+            self.user = 'root'
         self._password = data['vmware_password']
         self.thumbprint = data['vmware_fingerprint']
         if uri.username:
@@ -137,8 +140,10 @@ class _VMWare(object):
                 self.insecure = False
             else:
                 raise ValueError('Invalid value for "no_verify"')
-        elif data['transport_method'] == 'ssh':
-            self.insecure = True
+        elif uri.scheme == 'ssh' and data['insecure_connection']:
+            self.insecure = data['insecure_connection']
+        else:
+            self.insecure = False
 
         from . import pyvmomi_wrapper
         self.pyvmomi = pyvmomi_wrapper
@@ -206,7 +211,9 @@ class _VMWare(object):
                      auth_cb, None]
 
         if self._uri.startswith('ssh://'):
-            uri = "esx://%s@%s/?no_verify=1" % (self.user, self.server)
+            uri = "esx://%s@%s/" % (self.user, self.server)
+            if self.insecure:
+                uri += '?no_verify=1'
         else:
             uri = self._uri
 
@@ -350,10 +357,9 @@ class _PreCopyDisk(StateObject):
         self.overlay = None
 
         datastore = disk.backing.datastore
-        datastore_mountpoint = datastore.summary.url.replace("ds://", "")
-        self.absolute_path = "%s/%s" % (
-                datastore_mountpoint,
-                disk.backing.fileName.replace("[%s] " % datastore.name, ""))
+        datastore_mountpoint = datastore.summary.url[len("ds://"):]
+        relative_path = disk.backing.fileName[len('[%s] ' % datastore.name):]
+        self.absolute_path = "%s/%s" % (datastore_mountpoint, relative_path)
 
         self.commit_progress = None
 
@@ -677,14 +683,16 @@ class PreCopy(StateObject):
             f.write(self._fix_disks(self.vmware.get_domxml()))
         return xmlfile
 
-    def _get_nbdkit_cmd_vmdk(self, disk, filters, final):
-        env = 'LD_LIBRARY_PATH=%s' % VDDK_LIBRARY_PATH
-        if 'LD_LIBRARY_PATH' in os.environ:
-            env += ':' + os.environ['LD_LIBRARY_PATH']
+    def _get_nbdkit_cmd(self, disk, filters, final):
+        nbdkit_cmd = []
 
-        nbdkit_cmd = [
-            'env',
-            env,
+        if self._transport_method == 'vddk':
+            env = 'LD_LIBRARY_PATH=%s' % VDDK_LIBRARY_PATH
+            if 'LD_LIBRARY_PATH' in os.environ:
+                env += ':' + os.environ['LD_LIBRARY_PATH']
+            nbdkit_cmd.extend(['env', env])
+
+        nbdkit_cmd.extend([
             'nbdkit',
             '-v',
             '-U', disk.sock,
@@ -697,47 +705,28 @@ class PreCopy(StateObject):
             '--filter=' + f for f in filters
         ] + [
             '--filter=log',
-            'vddk',
-            # pylint: disable=protected-access
-            'vm=moref=%s' % self.vmware.get_vm()._moId,
-            'server=%s' % self.vmware.server,
+            self._transport_method,
             'password=+%s' % self._vmware_password_file,
-            'thumbprint=%s' % self.vmware.thumbprint,
-            'libdir=%s' % VDDK_LIBDIR,
-            'file=%s' % disk.copy_ref(final).path,
-        ]
-        if self.vmware.user:
-            nbdkit_cmd.append('user=%s' % self.vmware.user)
-        nbdkit_cmd.extend([
-            'logfile=%s' % STATE.wrapper_log,
-            'logappend=true',
         ])
 
-        return nbdkit_cmd
+        if self._transport_method == 'vddk':
+            nbdkit_cmd.extend([
+                # pylint: disable=protected-access
+                'vm=moref=%s' % self.vmware.get_vm()._moId,
+                'server=%s' % self.vmware.server,
+                'thumbprint=%s' % self.vmware.thumbprint,
+                'libdir=%s' % VDDK_LIBDIR,
+                'file=%s' % disk.copy_ref(final).path,
+            ])
+        else:
+            nbdkit_cmd.extend([
+                'host=%s' % self.vmware.server,
+                'path=%s' % '-flat'.join(os.path.splitext(disk.absolute_path)),
+            ])
 
-    def _get_nbdkit_cmd_ssh(self, disk, filters, final):
-        print("*** %s" % disk.absolute_path.replace('.vmdk', '-flat.vmdk'))
-        nbdkit_cmd = [
-            'nbdkit',
-            '-v',
-            '-U', disk.sock,
-            '-P', disk.pidfile,
-            '--exit-with-parent',
-            '--readonly',
-            '--foreground',
-            '--exportname=/',
-        ] + [
-            '--filter=' + f for f in filters
-        ] + [
-            '--filter=log',
-            'ssh',
-            # pylint: disable=protected-access
-            'host=%s' % self.vmware.server,
-            'password=+%s' % self._vmware_password_file,
-            'path=%s' % disk.absolute_path.replace('.vmdk', '-flat.vmdk'),
-        ]
         if self.vmware.user:
             nbdkit_cmd.append('user=%s' % self.vmware.user)
+
         nbdkit_cmd.extend([
             'logfile=%s' % STATE.wrapper_log,
             'logappend=true',
@@ -763,8 +752,7 @@ class PreCopy(StateObject):
                 filters.remove(filt)
 
         for disk in self.disks:
-            cmd = getattr(self, "_get_nbdkit_cmd_%s" % self._transport_method)(
-                    disk, filters, final)
+            cmd = self._get_nbdkit_cmd(disk, filters, final)
             logging.debug('Starting nbdkit: %s', cmd)
             log_fd = open(STATE.wrapper_log, 'a')
             disk.proc_nbdkit = subprocess.Popen(cmd,

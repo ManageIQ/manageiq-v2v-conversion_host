@@ -16,7 +16,7 @@ import uuid
 from collections import namedtuple
 from contextlib import contextmanager
 from io import BytesIO
-from six.moves.urllib.parse import urlparse
+from urllib.parse import urlparse
 
 from .common import error, hard_error, log_command_safe, add_perms_to_file
 from .state import STATE

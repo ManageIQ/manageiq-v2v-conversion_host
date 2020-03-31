@@ -265,25 +265,32 @@ class _VMWare(object):
                 logging.warning('Could not create a snapshot, will retry')
                 time.sleep(5)
 
-    def clean_snapshot(self, final):
-        # Here final means clean all (for the sake of clean-up simplicity)
-        if final:
-            snaps = [s for s in self._snapshots if s is not None]
-            if not snaps:
+    def clean_snapshot(self, snaps_used=None):
+        children = snaps_used is None
+        all_snaps = [s for s in self._snapshots if s is not None]
+        if children:
+            if not all_snaps:
                 return
-            snapshot = snaps[0]
+
+            snaps = [all_snaps[0]]
+
             # All snapshots should be removed, there should be none remaining
             self._snapshots = []
         else:
-            if len(self._snapshots) < 2:
+            logging.debug('All my snaps: %r', self._snapshots)
+            logging.debug('Snaps that are used: %r', snaps_used)
+            snaps = [s for s in all_snaps if s not in snaps_used]
+            logging.debug('Snaps to clean: %r', snaps)
+            if not snaps:
                 return
-            snapshot = self._snapshots[-2]
-            self._snapshots[-2] = None
+            new_snaps = [None if s in snaps else s for s in self._snapshots]
+            self._snapshots = new_snaps
 
-        logging.debug('Removing snapshot %s%s',
-                      snapshot, ' with children' if final else '')
-        self.pyvmomi.WaitForTask(snapshot.RemoveSnapshot_Task(final))
-        logging.debug('Snapshot removed')
+        for snapshot in snaps:
+            logging.debug('Removing snapshot %s%s',
+                          snapshot, ' with children' if children else '')
+            self.pyvmomi.WaitForTask(snapshot.RemoveSnapshot_Task(children))
+            logging.debug('Snapshot removed')
 
     def __del__(self):
         self._disconnect()
@@ -401,46 +408,66 @@ class _PreCopyDisk(StateObject):
         copy.status = 'Connected'
         STATE.write()
 
-        self.get_extents(vm, final)
-        if len(self.extents) == 0:
-            copy.to_copy = 0
-            copy.copied = 0
-            copy.end_time = time.time()
-            if not final and len(self.copies) > 2:
-                self.copies[-2].path = None
-                self.copies[-2].change_id = None
-                self.copies[-3].snapshot = None
-            return
-
-        nbd_handle = self.nbd.NBD()
-        nbd_handle.add_meta_context('base:allocation')
-        nbd_handle.connect_uri(nbd_uri_from_unix_socket(self.sock))
-        fd = os.open(self.local_path, os.O_WRONLY)
+        fd = None
+        nbd_handle = None
 
         try:
+            self.get_extents(vm, final)
+            if len(self.extents) == 0:
+                copy.to_copy = 0
+                copy.copied = 0
+                copy.end_time = time.time()
+                copy.status = 'Copied'
+                if final:
+                    if len(self.copies) > 1:
+                        self.copies[-2].snapshot = None
+                elif len(self.copies) > 2:
+                    self.copies[-2].path = None
+                    self.copies[-2].change_id = None
+                    self.copies[-3].snapshot = None
+                return
+
+            nbd_handle = self.nbd.NBD()
+            nbd_handle.add_meta_context('base:allocation')
+            nbd_handle.connect_uri(nbd_uri_from_unix_socket(self.sock))
+            fd = os.open(self.local_path, os.O_WRONLY)
+
             copy.status = 'Copying'
             STATE.write()
             self._copy_all(nbd_handle, fd, final, keepalive)
             copy.status = 'Copied'
             copy.end_time = time.time()
-            if not final and len(self.copies) > 2:
+            if final:
+                if len(self.copies) > 1:
+                    self.copies[-2].snapshot = None
+            elif len(self.copies) > 2:
                 self.copies[-2].path = None
                 self.copies[-2].change_id = None
                 self.copies[-3].snapshot = None
             STATE.write()
+        except (STATE.pre_copy.pyvmomi.vim.fault.VimFault,
+                STATE.pre_copy.nbd.Error) as exc:
+            if final:
+                # TODO: Fail?  Retry?  What function should be handling that?
+                error('Error during final copy iteration', exception=True)
+                raise
+            logging.exception('Recoverable error during copy')
+            copy.status = 'Recoverable error during copy: %s' % exc
+            copy.error = True
+            STATE.write()
+            pass
         except Exception:
             self.status = 'Unrecoverable error during copy'
             copy.error = True
             STATE.write()
-
-            # TODO: asdf: figure out when do we try to recover
-
             raise
         finally:
             # No matter whether it failed or not, we do not need to keep the
             # snapshot, just the change_id
-            os.close(fd)
-            nbd_handle.shutdown()
+            if fd is not None:
+                os.close(fd)
+            if nbd_handle is not None:
+                nbd_handle.shutdown()
 
     def _copy_all(self, nbd_handle, fd, final, keepalive):
         copy = self.copy_ref(final)
@@ -530,15 +557,21 @@ class _PreCopyDisk(StateObject):
 
     def update_change_ids(self, orig_disk, device, snapshot):
         self.copies[-1].snapshot = snapshot
-        change_id = device.backing.changeId
+
+        # If previous copy failed, take that data into consideration as well
+        if self.copies[-1].error:
+            logging.debug('Previous copy failed, reusing change_id')
+            change_id = self.copies[-1].change_id
+        else:
+            change_id = device.backing.changeId
+            # This might happen for some special disks and we might need to
+            # handle it, although it is out of the question for now
+            if change_id is None:
+                raise RuntimeError('Missing changeId for a disk')
+            logging.debug('Disk "%s" has new changeId=%s',
+                          self.logname, change_id)
+
         new_filename = orig_disk.backing.fileName
-
-        # This might happen for some special disks and we might need to handle
-        # it, although it is out of the question for now
-        if change_id is None:
-            raise RuntimeError('Missing changeId for a disk')
-
-        logging.debug('Disk "%s" has new changeId=%s', self.logname, change_id)
         self.copies.append(CopyIterationData(change_id, new_filename))
         STATE.write()
 
@@ -946,7 +979,12 @@ class PreCopy(StateObject):
             disk.copy(self.vmware.get_vm(), final, self.vmware.keepalive)
 
         self._stop_nbdkits()
-        self.vmware.clean_snapshot(final)
+
+        snaps_used = {c.snapshot for d in self.disks for c in d.copies}
+        # Needless, but clean
+        snaps_used = {s for s in snaps_used if s is not None}
+
+        self.vmware.clean_snapshot(snaps_used)
 
         for disk in self.disks:
             if disk.status == 'Copied':
@@ -1025,7 +1063,7 @@ class PreCopy(StateObject):
                       'file is not removed' % path, exception=True)
 
         try:
-            self.vmware.clean_snapshot(True)
+            self.vmware.clean_snapshot()
         except Exception:
             error('Error cleaning up snapshots after another error',
                   exception=True)

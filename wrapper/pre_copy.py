@@ -33,7 +33,7 @@ MAX_PREAD_LEN = 23 << 20        # 23MB (24M requests fail in vddk)
 BlockStatusData = namedtuple('BlockStatusData', ['offset', 'length', 'flags'])
 
 
-def get_block_status(nbd_handle, extents):
+def _get_block_status(nbd_handle, extents):
     blocks = []
 
     def update_blocks(metacontext, offset, extents, err):
@@ -472,7 +472,7 @@ class _PreCopyDisk(StateObject):
         self.status = 'Copying (getting block stats)'
         STATE.write()
 
-        blocks = get_block_status(nbd_handle, self.extents)
+        blocks = _get_block_status(nbd_handle, self.extents)
         data_blocks = [x for x in blocks if not x.flags & self.nbd.STATE_HOLE]
 
         logging.debug('Block status filtered down to %d data blocks',

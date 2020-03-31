@@ -22,6 +22,7 @@ from .common import add_perms_to_file, error, nbd_uri_from_unix_socket
 
 
 _TIMEOUT = 10
+_SNAPSHOT_TIMEOUT = 6 * _TIMEOUT
 
 NBD_MIN_VERSION = version.parse('1.0.0')
 NBD_AIO_MAX_IN_FLIGHT = 4
@@ -238,18 +239,31 @@ class _VMWare(object):
     def create_snapshot(self):
         vm = self.get_vm()
         logging.debug('Creating snapshot to get a new change_id')
-        task = vm.CreateSnapshot(name='v2v_cbt',
-                                 description='Snapshot to start CBT',
-                                 memory=False,
-                                 # The `quiesce` parameter can be False to
-                                 # make it slightly faster, but it should
-                                 # be first tested independently.
-                                 quiesce=True)
-        self.pyvmomi.WaitForTask(task)
-        # Update the VM data
-        vm = self.get_vm()
-        logging.debug('Snapshot created: %s', vm.snapshot.currentSnapshot)
-        self._snapshots.append(vm.snapshot.currentSnapshot)
+
+        endt = time.time() + _SNAPSHOT_TIMEOUT
+        while True:
+            try:
+                task = vm.CreateSnapshot(name='v2v_cbt',
+                                         description='Snapshot to start CBT',
+                                         memory=False,
+                                         # The `quiesce` parameter can be False
+                                         # to make it slightly faster, but it
+                                         # should be first tested
+                                         # independently.
+                                         quiesce=True)
+                self.pyvmomi.WaitForTask(task)
+                # Update the VM data
+                vm = self.get_vm()
+                logging.debug('Snapshot created: %s',
+                              vm.snapshot.currentSnapshot)
+                self._snapshots.append(vm.snapshot.currentSnapshot)
+                return
+            except self.pyvmomi.vim.fault.VimFault:
+                if endt < time.time():
+                    error('Could not create a snapshot', exception=True)
+                    raise RuntimeError('Could not create a snapshot')
+                logging.warning('Could not create a snapshot, will retry')
+                time.sleep(5)
 
     def clean_snapshot(self, final):
         # Here final means clean all (for the sake of clean-up simplicity)

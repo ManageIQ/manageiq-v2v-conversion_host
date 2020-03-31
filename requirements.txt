@@ -1,6 +1,5 @@
 ovirt-engine-sdk-python
 pycurl
-six
 yamllint
 tox
 flake8

@@ -6,7 +6,6 @@ import fcntl
 import libvirt
 import logging
 import re
-import six
 import stat
 import subprocess
 import tempfile
@@ -670,7 +669,7 @@ class PreCopy(StateObject):
             disk_data.fixed = True
 
         # Check that all paths were changed
-        for k, v in six.iteritems(disk_map):
+        for k, v in disk_map.items():
             if not v.fixed:
                 raise RuntimeError('Disk path "%s" was '
                                    'not fixed in the domxml' % k)

@@ -6,7 +6,6 @@ import math
 import os
 import pycurl
 import re
-import six
 import stat
 import subprocess
 import time
@@ -561,7 +560,7 @@ class OpenstackHost(_BaseHost):
             '-oo', 'guest-id=%s' % data['osp_guest_id'],
             ])
         # Convert to arguments of the form os-something
-        for k, v in six.iteritems(data['osp_environment']):
+        for k, v in data['osp_environment'].items():
             v2v_args.extend([
                 '-oo',
                 '%s=%s' % (k.lower().replace('_', '-'), v)])
@@ -651,7 +650,7 @@ class OpenstackHost(_BaseHost):
         if data.get('insecure_connection', False):
             command.append('--insecure')
         # Convert to arguments of the form os-something
-        for k, v in six.iteritems(data['osp_environment']):
+        for k, v in data['osp_environment'].items():
             command.append('--%s=%s' % (k.lower().replace('_', '-'), v))
         if destination:
             # It doesn't matter if there already is --os-project-name or

@@ -48,6 +48,14 @@ LOG_LEVEL = logging.DEBUG
 #
 
 def prepare_command(data, v2v_caps, agent_sock=None):
+    # Prepare environment
+    v2v_env = os.environ.copy()
+    v2v_env['LANG'] = 'C'
+    logging.debug('Using direct backend. Hack, hack...')
+    v2v_env['LIBGUESTFS_BACKEND'] = 'direct'
+    if agent_sock is not None:
+        v2v_env['SSH_AUTH_SOCK'] = agent_sock
+
     v2v_args = [
         '-v', '-x',
         '--root', 'first',
@@ -55,13 +63,7 @@ def prepare_command(data, v2v_caps, agent_sock=None):
     ]
 
     if STATE.pre_copy:
-        v2v_args.extend([
-            STATE.pre_copy.get_xml(),
-            '-i', 'libvirtxml',
-            # TODO: Remove later when v2v has support for direct commit
-            '--debug-overlays',
-            '--no-copy',
-        ])
+        STATE.pre_copy.prepare_command(v2v_env, v2v_args)
     else:
         if data['transport_method'] == 'vddk':
             v2v_args.extend([
@@ -99,14 +101,6 @@ def prepare_command(data, v2v_caps, agent_sock=None):
                     luks_key['filename']
                 )
             ])
-
-    # Prepare environment
-    v2v_env = os.environ.copy()
-    v2v_env['LANG'] = 'C'
-    logging.debug('Using direct backend. Hack, hack...')
-    v2v_env['LIBGUESTFS_BACKEND'] = 'direct'
-    if agent_sock is not None:
-        v2v_env['SSH_AUTH_SOCK'] = agent_sock
 
     return (v2v_args, v2v_env)
 

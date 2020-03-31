@@ -331,7 +331,6 @@ class _PreCopyDisk(StateObject):
         'key',  # Key on the VMWare server
         'label',  # Label for nicer user reporting
         'local_path',  # Path on local filesystem
-        'overlay',  # Path to the local overlay
         'path',  # The VMWare-reported path (on the host)
         'absolute_path',  # The absolute disk path on VMware host
         'pidfile',  # nbdkit's pidfile path
@@ -346,7 +345,6 @@ class _PreCopyDisk(StateObject):
         'extents',
         'key',
         'local_path',
-        'overlay',
         'path',
         'pidfile',
         'proc_nbdkit',
@@ -367,7 +365,6 @@ class _PreCopyDisk(StateObject):
         self.pidfile = os.path.join(tmp_dir, 'nbdkit-%s.pid' % self.key)
         self.proc_nbdkit = None
         self.proc_qemu = None
-        self.overlay = None
 
         datastore = disk.backing.datastore
         datastore_mountpoint = datastore.summary.url[len("ds://"):]
@@ -546,6 +543,23 @@ class _PreCopyDisk(StateObject):
         STATE.write()
 
 
+def _get_index_string(idx):
+    num_letters = (ord('z') - ord('a') + 1)
+    ret = ''
+    while True:
+        cur_idx = idx % num_letters
+        idx = idx // num_letters
+        ret = chr(ord('a') + cur_idx) + ret
+        if not idx:
+            return ret
+        idx = idx - 1
+
+
+def _get_overlay_path(tmp_dir, vm_name, idx):
+    filename = '%s-sd%s.qcow2' % (vm_name, _get_index_string(idx))
+    return os.path.join(tmp_dir, filename)
+
+
 class PreCopy(StateObject):
     __slots__ = [
         '_tmp_dir',
@@ -557,6 +571,7 @@ class PreCopy(StateObject):
         '_iteration_seconds',
         '_copy_trigger_path',
         '_pause_path',
+        '_vm_name',
 
         'disks',
     ]
@@ -570,6 +585,7 @@ class PreCopy(StateObject):
         '_iteration_seconds',
         '_copy_trigger_path',
         '_pause_path',
+        '_vm_name',
     ]
 
     qemu_progress_re = re.compile(r'\((\d+\.\d+)/100%\)')
@@ -616,6 +632,7 @@ class PreCopy(StateObject):
         if self._iteration_seconds < 0:
             raise RuntimeError('Invalid value for `iteration_seconds`')
         self._pause_path = os.path.join(RUN_DIR, 'pause_operations')
+        self._vm_name = data['vm_name']
 
         # Let others browse it
         add_perms_to_file(self._tmp_dir.name, stat.S_IXOTH, -1, -1)
@@ -690,11 +707,21 @@ class PreCopy(StateObject):
 
         return ETree.tostring(tree)
 
-    def get_xml(self):
+    def _get_xml(self):
         xmlfile = os.path.join(self._tmp_dir.name, 'vm.xml')
         with open(xmlfile, 'wb') as f:
             f.write(self._fix_disks(self.vmware.get_domxml()))
         return xmlfile
+
+    def prepare_command(self, v2v_env, v2v_args):
+        v2v_env['LIBGUESTFS_CACHEDIR'] = self._tmp_dir.name
+        v2v_args.extend([
+            self._get_xml(),
+            '-i', 'libvirtxml',
+            # TODO: Remove later when v2v has support for direct commit
+            '--debug-overlays',
+            '--no-copy',
+        ])
 
     def _get_nbdkit_cmd(self, disk, filters, final):
         nbdkit_cmd = []
@@ -928,15 +955,12 @@ class PreCopy(StateObject):
     def commit_overlays(self):
         "Commit all overlays to local disks."
 
-        for disk in self.disks:
-            if disk.overlay is None:
-                raise RuntimeError('Did not get any overlay data from v2v')
-
         ndisks = len(self.disks)
         cmd_templ = ['qemu-img', 'commit', '-p']
-        for i, disk in enumerate(self.disks, start=1):
-            logging.debug('Committing disk %d/%d', i, ndisks)
-            cmd = cmd_templ + [disk.overlay]
+        for i, disk in enumerate(self.disks):
+            logging.debug('Committing disk %d/%d', i + 1, ndisks)
+            path = _get_overlay_path(self._tmp_dir.name, self._vm_name, i)
+            cmd = cmd_templ + [path]
             try:
                 disk.proc_qemu = subprocess.Popen(cmd,
                                                   stdout=subprocess.PIPE,
@@ -966,10 +990,9 @@ class PreCopy(StateObject):
             disk.commit_progress = 100
             STATE.write()
             try:
-                os.remove(disk.overlay)
+                os.remove(path)
             except FileNotFoundError:
                 pass
-            disk.overlay = None
 
         self._wait_for_qemus(cb_progress, cb_done)
 
@@ -980,7 +1003,7 @@ class PreCopy(StateObject):
         # processes
         self._stop_nbdkits()
 
-        for disk in self.disks:
+        for i, disk in enumerate(self.disks):
             if disk.proc_qemu is None:
                 continue
             logging.debug('Stopping qemu-img with pid=%d', disk.proc_qemu.pid)
@@ -991,16 +1014,15 @@ class PreCopy(StateObject):
                 disk.proc_qemu.kill()
                 disk.proc_qemu.wait()
             disk.proc_qemu = None
-            if disk.overlay is not None:
-                try:
-                    os.remove(disk.overlay)
-                except FileNotFoundError:
-                    pass
-                except Exception:
-                    error('Cannot remove temporary file "%s", subsequent '
-                          'conversions of the same hose might fail if this '
-                          'file is not removed' % disk.overlay, exception=True)
-            disk.overlay = None
+            path = _get_overlay_path(self._tmp_dir.name, self._vm_name, i)
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            except Exception:
+                error('Cannot remove temporary file "%s", subsequent '
+                      'conversions of the same hose might fail if this '
+                      'file is not removed' % path, exception=True)
 
         try:
             self.vmware.clean_snapshot(True)

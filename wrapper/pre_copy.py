@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ETree
 
 from collections import namedtuple
 from packaging import version
-from six.moves.urllib.parse import urlparse, unquote, parse_qs
+from urllib.parse import urlparse, unquote, quote, parse_qs
 
 from .state import STATE, StateObject
 from .common import RUN_DIR, VDDK_LIBDIR, VDDK_LIBRARY_PATH
@@ -211,7 +211,7 @@ class _VMWare(object):
                      auth_cb, None]
 
         if self._uri.startswith('ssh://'):
-            uri = "esx://%s@%s/" % (self.user, self.server)
+            uri = "esx://%s@%s/" % (quote(self.user), self.server)
             if self.insecure:
                 uri += '?no_verify=1'
         else:

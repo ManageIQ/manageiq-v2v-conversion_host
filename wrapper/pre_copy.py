@@ -521,6 +521,7 @@ class _PreCopyDisk(StateObject):
         if len(data_blocks) == 0:
             logging.debug('No extents have allocated data for disk: %s',
                           self.logname)
+            self.status = 'Copied'
             return
 
         copy.status = 'Copying'

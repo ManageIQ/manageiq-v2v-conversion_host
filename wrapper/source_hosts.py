@@ -23,7 +23,7 @@ import subprocess
 import time
 from collections import namedtuple
 
-from .common import VDDK_LIBDIR
+from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR
 from .hosts import OpenstackHost
 from .state import STATE, Disk
 from .pre_copy import PreCopy
@@ -539,8 +539,8 @@ class OpenStackSourceHost(_BaseSourceHost):
         ssh_args.extend(['--volume', '/var/tmp:/var/tmp:z'])
         ssh_args.extend(['--volume', '/var/lock:/var/lock:z'])
         ssh_args.extend(['--volume', self.tmpdir+':/data:z'])
-        ssh_args.extend(['--volume', self.tmpdir+'/lib:/var/lib/uci:z'])
-        ssh_args.extend(['--volume', self.tmpdir+'/log:/var/log/uci:z'])
+        ssh_args.extend(['--volume', self.tmpdir+'/lib:'+RUN_DIR+':z'])
+        ssh_args.extend(['--volume', self.tmpdir+'/log:'+LOG_DIR+':z'])
         ssh_args.extend(['--volume', '{0}:{0}'.format(VDDK_LIBDIR)])
         ssh_args.extend(nbd_ports)
         ssh_args.extend(device_list)

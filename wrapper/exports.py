@@ -51,13 +51,16 @@ def export_nbd(port_map):
 
     # Check qemu-img info on all the disks to make sure everything is ready
     logging.info('Waiting for valid qemu-img info on all exports...')
+    pending_disks = set(port_map.keys())
     for second in range(DEFAULT_TIMEOUT):
         try:
-            for disk, port in port_map.items():
+            for disk in pending_disks.copy():
+                port = port_map[disk]
                 cmd = ['qemu-img', 'info', 'nbd://localhost:{}'.format(port)]
                 image_info = subprocess.check_output(cmd)
                 logging.info('qemu-img info for %s: %s', disk, image_info)
-        except Exception as error:
+                pending_disks.remove(disk)
+        except subprocess.CalledProcessError as error:
             logging.info('Got exception: %s', error)
             logging.info('Trying again.')
             time.sleep(1)

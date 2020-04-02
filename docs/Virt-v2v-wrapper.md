@@ -71,7 +71,7 @@ point the following key is mandatory:
 * `conversion_host_uuid`: the UUID of a VM in which the actual conversion is
   being performed.
 
-Output configuration: reffer to the section [Output
+Output configuration: refer to the section [Output
 configuration](#output-configuration) below.
 
 Miscellaneous:
@@ -106,6 +106,16 @@ The migration works by attaching volumes to the source and destination
 conversion hosts and transferring data from inside the conversion hosts over
 SSH.
 
+Currently, both source and destination conversion hosts expect to run inside a
+Universal Conversion Image (UCI) provided by this project:
+https://github.com/ManageIQ/manageiq-v2v-conversion_host-build
+
+Specifically, the appliance version of the UCI should be uploaded to source and
+destination OpenStack clouds as an image, and conversion host instances should
+be created from those images. Log in as `cloud-user` and check the output of
+`sudo podman images`. There should be a pre-configured container named
+`v2v-conversion-host` that contains the actual V2V-wrapper tooling.
+
 ### Source OpenStack cloud
 
 * A conversion host instance must be launched from the UCI, in the same project
@@ -117,8 +127,7 @@ from the destination OpenStack cloud.
 * The conversion host instance must have SSH enabled in the security rules.
 * The conversion host instance must be configured for key-based SSH access from
 the destination conversion host instance (see input arguments below).
-* The source VM must be shut down. If it is not already shut down, the wrapper
-will shut it down forcibly before proceeding with the transfer.
+* The source VM must be shut down.
 * If the source VM is launched from a volume, there must be space in the
 project's quota for one snapshot of that volume, and for one new volume to be
 created from that snapshot.
@@ -134,55 +143,44 @@ VM's flavor specification).
 virt-v2v requires.
 * The destination conversion host must be configured to be able to log in to
 the source conversion host instance with an SSH key. The key can be specified
-in the `ssh_key` input argument, or stored in /home/cloud-user/.ssh.
+in the `ssh_key` input argument, or stored in /home/cloud-user/.ssh. In
+addition, the `transport_method` input argument must be set to `ssh`.
 
 ### OpenStack-specific inputs
 
 To initiate an OpenStack migration, the input file must have the following keys
 set:
-
-* `vm_name`: The name of the migrated VM on the destination side
-* `transport_method`: Must be set to "ssh" for OpenStack-to-OpenStack migration
-* `osp_environment`: Contains the usual OpenStack destination arguments, passed
-to the openstack command through virt-v2v. Each subkey must be prefixed with
-'os-'.
-* `osp_destination_project_id`: The ID of the receiving project on the
-destination OpenStack side.
-* `osp_flavor_id`: The flavor to use to create the new VM on the destination
-OpenStack side, after all volumes are transferred.
-* `osp_security_group_ids`: A list of IDs of the security groups that should be
-applied to the new VM on the destination.
-* `osp_server_id`: The ID of the destination conversion host.
-* `insecure_connection`: Set to true or false to decide whether or not the
-certificate of the destination OpenStack API should be verified.
-* `source_disks`: Optional list of volume IDs to include in the transfer.
-Without this, the wrapper will transfer all volumes connected to the source VM.
-If this is set, the wrapper will only transfer the connected volumes that are
-included in this list. Volumes that are included in this list but not connected
-to the target VM will not be included in the transfer.
-* `ssh_key`: An OpenSSH private key that is authorized on the source and
-destination conversion host instances. Optional, but if this is missing then
-care must be taken to authorize the destination conversion host's private key
-on the source conversion host. The destination conversion host will expect to
-have password-less SSH to the source conversion host!
+* `osp_source_vm_id`: The ID of the target VM to copy from the OpenStack source
+* `osp_source_conversion_vm_id`: The ID of the source conversion host instance
 * `osp_source_environment`: A set of sub-items to organize arguments for the
 source OpenStack cloud.
-  * `vm_id`: The ID of the target VM to migrate from the OpenStack source
-  * `conversion_vm_id`: The ID of the source conversion host instance
-  * `auth_url`: Public keystone URL for access to the OpenStack API
-  * `username`: Source OpenStack username. Currently only username/password
-  logins are supported for the source side.
-  * `password`: Source OpenStack password
-  * `user_domain_name`: Source OpenStack user domain
-  * `project_name`: Name of project containing source conversion host instance
-  * `project_domain_name`: Domain name of source project
-  * `verify`: Verify source OpenStack API certificate (true or false)
+  * `os-auth_url`: Public keystone URL for access to the OpenStack API
+  * `os-username`: Source OpenStack username. Currently only username/password
+  log-ins are supported for the source side.
+  * `os-password`: Source OpenStack password
+  * `os-user_domain_name`: Source OpenStack user domain
+  * `os-project_name`: Name of project containing source conversion host instance
+  * `os-project_domain_name`: Domain name of source project
+  * `os-verify`: Verify source OpenStack API certificate (true or false)
+* `uci_container`: The ID of the virt-v2v-wrapper container inside the UCI on
+the source conversion host. This is needed so that the destination conversion
+host can run the second copy of the wrapper on the source. This defaults to
+`v2v-conversion-host`, which may not always match different builds of the UCI.
+
+Currently OpenStack source clouds can only be migrated to an OpenStack
+destination, so a full input JSON needs to include the OpenStack input
+parameters specified in `Openstack output` below.
 
 Example:
 
 	{
 		"vm_name": "migration-vm",
 		"transport_method": "ssh",
+		"insecure_connection": true,
+		"osp_destination_project_id": "46deadaba9234ed4bef28caa459bdd16",
+		"osp_flavor_id": "a96b2815-3525-4eea-9ab4-14ba58e17835",
+		"osp_security_groups_ids": ["d5366f19-c34f-493c-a816-b305085c8fae"],
+		"osp_server_id": "b9ca0b1b-0eba-45c4-8c0b-4f27457b72be",
 		"osp_environment": {
 			"os-auth_url": "http://192.168.55.9:5000/v3",
 			"os-username": "migration-user",
@@ -191,22 +189,17 @@ Example:
 			"os-project_domain_name": "Default",
 			"os-user_domain_name": "Default"
 		},
-		"osp_destination_project_id": "46deadaba9234ed4bef28caa459bdd16",
-		"osp_flavor_id": "a96b2815-3525-4eea-9ab4-14ba58e17835",
-		"osp_security_groups_ids": ["d5366f19-c34f-493c-a816-b305085c8fae"],
-		"osp_server_id": "b9ca0b1b-0eba-45c4-8c0b-4f27457b72be",
-		"insecure_connection": true,
+		"osp_source_vm_id": "c28d5a15-0372-4222-95d3-13055f3c6a9b",
+		"osp_source_conversion_vm_id": "5143dba7-c8ac-4230-ac9a-dbd21788f209"
 		"osp_source_environment": {
-			"auth_url": "http://192.168.75.19:5000/v3",
-			"username": "new-migration-user",
-			"password": "migrate",
-			"project_name": "migration-source",
-			"project_domain_name": "Default",
-			"user_domain_name": "Default",
-			"verify": false,
-			"vm_id": "c28d5a15-0372-4222-95d3-13055f3c6a9b",
-			"conversion_vm_id": "5143dba7-c8ac-4230-ac9a-dbd21788f209"
+			"os-auth_url": "http://192.168.75.19:5000/v3",
+			"os-username": "new-migration-user",
+			"os-password": "migrate",
+			"os-project_name": "migration-source",
+			"os-project_domain_name": "Default",
+			"os-user_domain_name": "Default",
 		},
+		"uci_container": "v2v-conversion-host-rhel8",
 		"ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n...\n-----END OPENSSH PRIVATE KEY-----\n"
 	}
 

@@ -18,12 +18,12 @@ import errno
 import fcntl
 import json
 import logging
-import openstack
 import os
 import subprocess
 import time
 from collections import namedtuple
 
+from .common import VDDK_LIBDIR
 from .hosts import OpenstackHost
 from .state import STATE, Disk
 from .pre_copy import PreCopy
@@ -46,6 +46,29 @@ def detect_source_host(data, agent_sock):
     if 'osp_source_environment' in data:
         return OpenStackSourceHost(data, agent_sock)
     return None
+
+
+def avoid_wrapper(source_host, host):
+    """
+    Check if this combination of source and destination host should avoid
+    running virt-v2v.
+    """
+    return source_host and source_host.avoid_wrapper(host)
+
+
+def migrate_instance(source_host, host):
+    """ Run all the pieces of a source_host migration. """
+    if source_host:
+        try:
+            source_host.prepare_exports()
+            source_host.transfer_exports(host)
+            source_host.close_exports()
+        except RuntimeError:
+            logging.error('Got error migrating instance, attempting cleanup.')
+            source_host.close_exports()
+            raise
+    else:
+        logging.info('Ignoring migration request for empty source_host.')
 
 
 def _use_lock(lock_file):
@@ -111,31 +134,39 @@ class OpenStackSourceHost(_BaseSourceHost):
     """ Export volumes from an OpenStack instance. """
 
     def __init__(self, data, agent_sock):
-        # Create a connection to the source cloud
-        osp_arg_list = ['auth_url', 'username', 'password',
-                        'project_name', 'project_domain_name',
-                        'user_domain_name', 'verify']
-        osp_env = data['osp_source_environment']
-        osp_args = {arg: osp_env[arg] for arg in osp_arg_list}
-        self.source_converter = osp_env['conversion_vm_id']
-        self.source_instance = osp_env['vm_id']
-        self.conn = openstack.connect(**osp_args)
-
-        # Create a connection to the destination cloud
+        try:
+            import openstack
+        except ImportError:
+            raise RuntimeError('OpenStack SDK is not installed on this '
+                               'conversion host!')
         osp_arg_list = ['os-auth_url', 'os-username', 'os-password',
                         'os-project_name', 'os-project_domain_name',
                         'os-user_domain_name']
+
+        # Create a connection to the source cloud
+        osp_env = data['osp_source_environment']
+        osp_args = {arg[3:].lower(): osp_env[arg] for arg in osp_arg_list}
+        osp_args['verify'] = not data.get('insecure_connection', False)
+        self.source_converter = data['osp_source_conversion_vm_id']
+        self.source_instance = data['osp_source_vm_id']
+        self.conn = openstack.connect(**osp_args)
+
+        # Create a connection to the destination cloud
         osp_env = data['osp_environment']
-        osp_args = {arg[3:]: osp_env[arg] for arg in osp_arg_list}  # Trim os-
+        osp_args = {arg[3:].lower(): osp_env[arg] for arg in osp_arg_list}
+        osp_args['verify'] = not data.get('insecure_connection', False)
         self.dest_converter = data['osp_server_id']
-        if 'insecure_connection' in data:
-            osp_args['verify'] = not data['insecure_connection']
-        else:
-            osp_args['verify'] = False
         self.dest_conn = openstack.connect(**osp_args)
 
         self.agent_sock = agent_sock
-        openstack.enable_logging()  # Make openstacksdk logging quieter
+        openstack.enable_logging(debug=False, http_debug=False, stream=None)
+
+        if self._converter() is None:
+            raise RuntimeError('Cannot find source instance {}'.format(
+                               self.source_converter))
+        if self._destination() is None:
+            raise RuntimeError('Cannot find destination instance {}'.format(
+                               self.dest_converter))
 
         # Build up a list of VolumeMappings keyed by the original device path
         self.volume_map = {}
@@ -143,16 +174,22 @@ class OpenStackSourceHost(_BaseSourceHost):
         # Temporary directory for logs on source conversion host
         self.tmpdir = None
 
+        # SSH tunnel process
+        self.forwarding_process = None
+
         # If there is a specific list of disks to transfer, remember them so
         # only those disks get transferred.
         self.source_disks = None
         if 'source_disks' in data:
             self.source_disks = data['source_disks']
 
+        # Allow UCI container ID (or name) to be passed in input JSON
+        self.uci_container = data.get('uci_container', 'v2v-conversion-host')
+
     def prepare_exports(self):
         """ Attach the source VM's volumes to the source conversion host. """
         self._test_ssh_connection()
-        self._shutdown_source_vm()
+        self._test_source_vm_shutdown()
         self._get_root_and_data_volumes()
         self._detach_data_volumes_from_source()
         self._attach_volumes_to_converter()
@@ -160,7 +197,6 @@ class OpenStackSourceHost(_BaseSourceHost):
 
     def close_exports(self):
         """ Put the source VM's volumes back where they were. """
-        self._test_ssh_connection()
         self._converter_close_exports()
         self._detach_volumes_from_converter()
         self._attach_data_volumes_to_source()
@@ -265,14 +301,11 @@ class OpenStackSourceHost(_BaseSourceHost):
         if out != 'connected':
             raise RuntimeError('Unable to SSH to source conversion host!')
 
-    def _shutdown_source_vm(self):
-        """ Shut down the migration source VM before moving its volumes. """
+    def _test_source_vm_shutdown(self):
+        """ Make sure the source VM is shutdown, and fail if it isn't. """
         server = self.conn.compute.get_server(self._source_vm().id)
         if server.status != 'SHUTOFF':
-            self.conn.compute.stop_server(server=server)
-            logging.info('Waiting for source VM to stop...')
-            self.conn.compute.wait_for_server(server, 'SHUTOFF',
-                                              wait=DEFAULT_TIMEOUT)
+            raise RuntimeError('Source VM is not shut down!')
 
     def _get_attachment(self, volume, vm):
         """
@@ -484,7 +517,7 @@ class OpenStackSourceHost(_BaseSourceHost):
             dev_path = mapping.source_dev
             uci_dev_path = mapping.source_dev+'-v2v'
             logging.info('Exporting %s from volume %s', dev_path, volume_id)
-            nbd_ports.extend(['-p', '{0}'.format(port)])
+            nbd_ports.extend(['-p', '127.0.0.1::{0}'.format(port)])
             device_list.extend(['--device', dev_path+':'+uci_dev_path])
             reverse_port_map[port] = path
             port_map[uci_dev_path] = port
@@ -508,12 +541,10 @@ class OpenStackSourceHost(_BaseSourceHost):
         ssh_args.extend(['--volume', self.tmpdir+':/data:z'])
         ssh_args.extend(['--volume', self.tmpdir+'/lib:/var/lib/uci:z'])
         ssh_args.extend(['--volume', self.tmpdir+'/log:/var/log/uci:z'])
-        ssh_args.extend(['--volume',
-                         '/opt/vmware-vix-disklib-distrib:'
-                         '/opt/vmware-vix-disklib-distrib'])
+        ssh_args.extend(['--volume', '{0}:{0}'.format(VDDK_LIBDIR)])
         ssh_args.extend(nbd_ports)
         ssh_args.extend(device_list)
-        ssh_args.extend(['v2v-conversion-host'])
+        ssh_args.extend([self.uci_container])
         self.uci_id = self._converter_out(ssh_args)
         logging.debug('Source UCI container ID: %s', self.uci_id)
 
@@ -525,7 +556,11 @@ class OpenStackSourceHost(_BaseSourceHost):
             logging.debug('Forwarding port from podman: %s', line)
             internal_port, _, _ = line.partition('/')
             _, _, external_port = line.rpartition(':')
-            port = int(internal_port)
+            try:
+                port = int(internal_port)
+            except ValueError:
+                raise RuntimeError('Could not get port number from podman on '
+                                   'source conversion host! Line was '+line)
             path = reverse_port_map[port]
             # The internal_port in the source conversion container is forwarded
             # to external_port on the source conversion host, and then we need
@@ -572,17 +607,21 @@ class OpenStackSourceHost(_BaseSourceHost):
         try:
             out = self._converter_out(['sudo', 'podman', 'stop', self.uci_id])
             logging.info('Closed NBD export with result: %s', out)
+        except subprocess.CalledProcessError as err:
+            logging.debug('Error stopping UCI container on source: %s', err)
 
+        try:
             # Copy logs from temporary directory locally, and clean up source
             if self.tmpdir:
-                os.mkdir(SOURCE_LOGS_DIR)
+                os.makedirs(SOURCE_LOGS_DIR, exist_ok=True)
                 self._converter_scp_from(self.tmpdir+'/*', SOURCE_LOGS_DIR,
                                          recursive=True)
                 self._converter_out(['sudo', 'rm', '-rf', self.tmpdir])
+        except subprocess.CalledProcessError as err:
+            logging.debug('Error copying logs from source: %s', err)
 
+        if self.forwarding_process:
             self.forwarding_process.terminate()
-        except Exception as error:
-            logging.debug('Error closing exports: %s', error)
 
     def _volume_still_attached(self, volume, vm):
         """ Check if a volume is still attached to a VM. """
@@ -754,7 +793,7 @@ class OpenStackSourceHost(_BaseSourceHost):
                         raise RuntimeError('Failed to convert volume!')
 
                 _log_convert(overlay, 'qcow2', mapping)
-            except Exception:
+            except (OSError, subprocess.CalledProcessError):
                 logging.info('Sparsify failed, converting whole device...')
                 if os.path.isfile(overlay):
                     os.remove(overlay)

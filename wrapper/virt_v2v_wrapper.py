@@ -431,16 +431,19 @@ def finish(host, data):
         logging.debug('Cleanup phase')
         # Need to clean up as much as possible, even if only one tiny clean up
         # function fails
-        try:
-            host.handle_cleanup(data)
-        except Exception:
-            logging.exception("Got exception while cleaning up data")
 
+        # Clean-up pre-copy stuff first so that host-related resources are not
+        # used any more
         if STATE.pre_copy:
             try:
                 STATE.pre_copy.cleanup()
             except Exception:
                 logging.exception("Got exception while cleaning up data")
+
+        try:
+            host.handle_cleanup(data)
+        except Exception:
+            logging.exception("Got exception while cleaning up data")
 
     # Remove password files
     logging.info('Removing password files')

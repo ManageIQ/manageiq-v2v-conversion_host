@@ -29,6 +29,7 @@ import time
 
 from .state import STATE, Disk
 from .common import error, hard_error, log_command_safe, write_password
+from .common import setup_signals, disable_interrupt
 from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR
 from .hosts import detect_host
 from .log_parser import log_parser
@@ -280,6 +281,7 @@ def main():
             hard_error("This output does not support two-phase conversion")
         STATE.pre_copy.init_disk_data()
 
+    setup_signals()
     try:
         #
         # NOTE: don't use hard_error() beyond this point!
@@ -421,6 +423,7 @@ def validate_data(host, data):
     STATE.pre_copy = PreCopy(data)
 
 
+@disable_interrupt
 def finish(host, data):
     if STATE.failed:
         # Perform cleanup after failed conversion

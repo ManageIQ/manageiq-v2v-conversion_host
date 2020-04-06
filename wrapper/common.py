@@ -3,6 +3,7 @@ import copy
 import logging
 import os
 import re
+import signal
 import stat
 import subprocess
 import sys
@@ -16,6 +17,8 @@ LOG_DIR = '/var/log/uci'
 
 VDDK_LIBDIR = '/opt/vmware-vix-disklib-distrib'
 VDDK_LIBRARY_PATH = '/opt/vmware-vix-disklib-distrib/lib64'
+
+HANDLED_SIGNALS = {signal.SIGTERM, signal.SIGINT}
 
 
 def atexit_command(cmd):
@@ -136,3 +139,21 @@ def add_perms_to_file(path, modes, uid=-1, gid=-1):
 
 def nbd_uri_from_unix_socket(sock_path):
     return 'nbd+unix:///?socket=%s' % sock_path
+
+
+def setup_signals():
+    def handle_signal(sig_num, _frame):
+        hard_error('Exiting on signal number %d' % sig_num)
+
+    for sig in HANDLED_SIGNALS:
+        signal.signal(sig, handle_signal)
+
+
+def disable_interrupt(func):
+    def ret_func(*args, **kwargs):
+        old_sigmask = signal.pthread_sigmask(signal.SIG_SETMASK,
+                                             HANDLED_SIGNALS)
+        func(*args, **kwargs)
+        signal.pthread_sigmask(signal.SIG_SETMASK, old_sigmask)
+
+    return ret_func

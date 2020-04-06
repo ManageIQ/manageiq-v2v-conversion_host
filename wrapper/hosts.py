@@ -18,6 +18,7 @@ from io import BytesIO
 from urllib.parse import urlparse
 
 from .common import error, hard_error, log_command_safe, add_perms_to_file
+from .common import disable_interrupt
 from .state import STATE
 from .osp_wrapper import osp_wrapper_create
 
@@ -275,6 +276,7 @@ class OpenstackHost(_BaseHost):
                                        wait_for_disks)
                 time.sleep(1)
 
+    @disable_interrupt
     def _create_disks(self, data):
         if not STATE.pre_copy.disks:
             RuntimeError('Looks like no disks were detected')
@@ -304,6 +306,7 @@ class OpenstackHost(_BaseHost):
 
         self._wait_for_disks(data)
 
+    @disable_interrupt
     def _attach_disks(self, data):
         paths = []
         args = ['server', 'add', 'volume', data['osp_server_id']]
@@ -750,6 +753,7 @@ class OvirtHost(_BaseHost):
                                        'to become unlocked')
                 time.sleep(1)
 
+    @disable_interrupt
     def _create_disks(self, disks_service, data):
         if not STATE.pre_copy.disks:
             RuntimeError('Looks like no disks were detected')
@@ -785,10 +789,7 @@ class OvirtHost(_BaseHost):
 
         self._wait_for_ovirt_disks(disks_service)
 
-    def _remove_disks(self, system_service):
-        disks_service = system_service.disks_service()
-        self._delete_disks(disks_service, [d.id for d in self._created_disks])
-
+    @disable_interrupt
     def _attach_disks(self, system_service):
         paths = []
         arguments = dict(active=True,
@@ -832,6 +833,7 @@ class OvirtHost(_BaseHost):
             att.disk.shareable = False
             das.attachment_service(att.id).update(att)
 
+    @disable_interrupt
     def _detach_disks(self, system_service, vm):
         vms = system_service.vms_service().vm_service(vm.id)
         das = vms.disk_attachments_service()
@@ -915,7 +917,8 @@ class OvirtHost(_BaseHost):
             vm = system_service.vms_service().vm_service(STATE.vm_id)
             self._detach_disks(system_service, vm.get())
             vm.remove()
-        self._remove_disks(system_service)
+        self._delete_disks(system_service.disks_service(),
+                           [d.id for d in self._created_disks])
 
     def _handle_simple_cleanup(self, system_service, data):
         transfers_service = system_service.image_transfers_service()

@@ -76,11 +76,6 @@ def error(short_message, *args, **kwargs):
 def hard_error(msg):
     """
     Function to produce an error and terminate the wrapper.
-
-    WARNING: This can be used only at the early initialization stage! Do NOT
-    use this once the password files are written or there are any other
-    temporary data that should be removed at exit. This function uses
-    sys.exit() which overcomes the code responsible for removing the files.
     """
     logging.error(msg)
     sys.stderr.write(msg)
@@ -90,6 +85,8 @@ def hard_error(msg):
             'message': msg,
             'type': 'error'
         }
+        STATE.failed = True
+        STATE.finished = True
         STATE.write()
     sys.exit(1)
 

@@ -994,6 +994,8 @@ class PreCopy(StateObject):
     def commit_overlays(self):
         "Commit all overlays to local disks."
 
+        STATE.status = 'Finishing (committing overlays)'
+
         ndisks = len(self.disks)
         cmd_templ = ['qemu-img', 'commit', '-p']
         for i, disk in enumerate(self.disks):

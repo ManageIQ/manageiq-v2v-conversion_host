@@ -112,7 +112,8 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
     v2v_args, v2v_env = host.prepare_command(
         data, v2v_args, v2v_env, v2v_caps)
 
-    logging.info('Starting virt-v2v:')
+    STATE.status = 'Starting virt-v2v'
+    logging.info(STATE.status)
     log_command_safe(v2v_args, v2v_env)
 
     runner = SubprocessRunner(v2v_args, v2v_env, STATE.v2v_log)

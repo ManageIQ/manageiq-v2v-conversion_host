@@ -214,12 +214,6 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 	}
 	for _, diskAttachment := range diskAttachments.(*ovirtsdk.DiskAttachmentSlice).Slice() {
 		disk := &disk{}
-		if id, ok := diskAttachment.Id(); ok {
-			disk.ID = id
-		}
-		if name, ok := diskAttachment.Name(); ok {
-			disk.Name = name
-		}
 		if bootable, ok := diskAttachment.Bootable(); ok {
 			disk.Bootable = bootable
 		}
@@ -233,6 +227,12 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 		}
 		if size, ok := vmDisk.(*ovirtsdk.Disk).ProvisionedSize(); ok {
 			disk.Size = size
+		}
+		if id, ok := vmDisk.(*ovirtsdk.Disk).Id(); ok {
+			disk.ID = id
+		}
+		if name, ok := vmDisk.(*ovirtsdk.Disk).Alias(); ok {
+			disk.Name = name
 		}
 		sdLink, _ := vmDisk.(*ovirtsdk.Disk).StorageDomains()
 		sd, err := c.conn.FollowLink(sdLink.Slice()[0])

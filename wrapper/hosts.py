@@ -552,8 +552,8 @@ class OpenstackHost(_BaseHost):
                                -1, self.get_gid())
             v2v_env['PATH'] = self._tmp_dir.name + os.pathsep + v2v_env['PATH']
 
-        logging.debug("attached paths are: %r" %
-                      [x.local_path for x in STATE.pre_copy.disks])
+            logging.debug("attached paths are: %r" %
+                          [x.local_path for x in STATE.pre_copy.disks])
 
         v2v_args.extend([
             '-o', 'openstack',

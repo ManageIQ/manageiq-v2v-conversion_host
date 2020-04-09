@@ -6,7 +6,6 @@ import fcntl
 import libvirt
 import logging
 import re
-import six
 import stat
 import subprocess
 import tempfile
@@ -23,6 +22,7 @@ from .common import add_perms_to_file, error, nbd_uri_from_unix_socket
 
 
 _TIMEOUT = 10
+_SNAPSHOT_TIMEOUT = 6 * _TIMEOUT
 
 NBD_MIN_VERSION = version.parse('1.0.0')
 NBD_AIO_MAX_IN_FLIGHT = 4
@@ -34,7 +34,7 @@ MAX_PREAD_LEN = 23 << 20        # 23MB (24M requests fail in vddk)
 BlockStatusData = namedtuple('BlockStatusData', ['offset', 'length', 'flags'])
 
 
-def get_block_status(nbd_handle, extents):
+def _get_block_status(nbd_handle, extents):
     blocks = []
 
     def update_blocks(metacontext, offset, extents, err):
@@ -239,38 +239,58 @@ class _VMWare(object):
     def create_snapshot(self):
         vm = self.get_vm()
         logging.debug('Creating snapshot to get a new change_id')
-        task = vm.CreateSnapshot(name='v2v_cbt',
-                                 description='Snapshot to start CBT',
-                                 memory=False,
-                                 # The `quiesce` parameter can be False to
-                                 # make it slightly faster, but it should
-                                 # be first tested independently.
-                                 quiesce=True)
-        self.pyvmomi.WaitForTask(task)
-        # Update the VM data
-        vm = self.get_vm()
-        logging.debug('Snapshot created: %s', vm.snapshot.currentSnapshot)
-        self._snapshots.append(vm.snapshot.currentSnapshot)
 
-    def clean_snapshot(self, final):
-        # Here final means clean all (for the sake of clean-up simplicity)
-        if final:
-            snaps = [s for s in self._snapshots if s is not None]
-            if not snaps:
+        endt = time.time() + _SNAPSHOT_TIMEOUT
+        while True:
+            try:
+                task = vm.CreateSnapshot(name='v2v_cbt',
+                                         description='Snapshot to start CBT',
+                                         memory=False,
+                                         # The `quiesce` parameter can be False
+                                         # to make it slightly faster, but it
+                                         # should be first tested
+                                         # independently.
+                                         quiesce=True)
+                self.pyvmomi.WaitForTask(task)
+                # Update the VM data
+                vm = self.get_vm()
+                logging.debug('Snapshot created: %s',
+                              vm.snapshot.currentSnapshot)
+                self._snapshots.append(vm.snapshot.currentSnapshot)
                 return
-            snapshot = snaps[0]
+            except self.pyvmomi.vim.fault.VimFault:
+                if endt < time.time():
+                    error('Could not create a snapshot', exception=True)
+                    raise RuntimeError('Could not create a snapshot')
+                logging.warning('Could not create a snapshot, will retry')
+                time.sleep(5)
+
+    def clean_snapshot(self, snaps_used=None):
+        children = snaps_used is None
+        all_snaps = [s for s in self._snapshots if s is not None]
+        if children:
+            if not all_snaps:
+                return
+
+            snaps = [all_snaps[0]]
+
             # All snapshots should be removed, there should be none remaining
             self._snapshots = []
         else:
-            if len(self._snapshots) < 2:
+            logging.debug('All my snaps: %r', self._snapshots)
+            logging.debug('Snaps that are used: %r', snaps_used)
+            snaps = [s for s in all_snaps if s not in snaps_used]
+            logging.debug('Snaps to clean: %r', snaps)
+            if not snaps:
                 return
-            snapshot = self._snapshots[-2]
-            self._snapshots[-2] = None
+            new_snaps = [None if s in snaps else s for s in self._snapshots]
+            self._snapshots = new_snaps
 
-        logging.debug('Removing snapshot %s%s',
-                      snapshot, ' with children' if final else '')
-        self.pyvmomi.WaitForTask(snapshot.RemoveSnapshot_Task(final))
-        logging.debug('Snapshot removed')
+        for snapshot in snaps:
+            logging.debug('Removing snapshot %s%s',
+                          snapshot, ' with children' if children else '')
+            self.pyvmomi.WaitForTask(snapshot.RemoveSnapshot_Task(children))
+            logging.debug('Snapshot removed')
 
     def __del__(self):
         self._disconnect()
@@ -318,7 +338,6 @@ class _PreCopyDisk(StateObject):
         'key',  # Key on the VMWare server
         'label',  # Label for nicer user reporting
         'local_path',  # Path on local filesystem
-        'overlay',  # Path to the local overlay
         'path',  # The VMWare-reported path (on the host)
         'absolute_path',  # The absolute disk path on VMware host
         'pidfile',  # nbdkit's pidfile path
@@ -333,7 +352,6 @@ class _PreCopyDisk(StateObject):
         'extents',
         'key',
         'local_path',
-        'overlay',
         'path',
         'pidfile',
         'proc_nbdkit',
@@ -354,7 +372,6 @@ class _PreCopyDisk(StateObject):
         self.pidfile = os.path.join(tmp_dir, 'nbdkit-%s.pid' % self.key)
         self.proc_nbdkit = None
         self.proc_qemu = None
-        self.overlay = None
 
         datastore = disk.backing.datastore
         datastore_mountpoint = datastore.summary.url[len("ds://"):]
@@ -391,46 +408,66 @@ class _PreCopyDisk(StateObject):
         copy.status = 'Connected'
         STATE.write()
 
-        self.get_extents(vm, final)
-        if len(self.extents) == 0:
-            copy.to_copy = 0
-            copy.copied = 0
-            copy.end_time = time.time()
-            if not final and len(self.copies) > 2:
-                self.copies[-2].path = None
-                self.copies[-2].change_id = None
-                self.copies[-3].snapshot = None
-            return
-
-        nbd_handle = self.nbd.NBD()
-        nbd_handle.add_meta_context('base:allocation')
-        nbd_handle.connect_uri(nbd_uri_from_unix_socket(self.sock))
-        fd = os.open(self.local_path, os.O_WRONLY)
+        fd = None
+        nbd_handle = None
 
         try:
+            self.get_extents(vm, final)
+            if len(self.extents) == 0:
+                copy.to_copy = 0
+                copy.copied = 0
+                copy.end_time = time.time()
+                copy.status = 'Copied'
+                if final:
+                    if len(self.copies) > 1:
+                        self.copies[-2].snapshot = None
+                elif len(self.copies) > 2:
+                    self.copies[-2].path = None
+                    self.copies[-2].change_id = None
+                    self.copies[-3].snapshot = None
+                return
+
+            nbd_handle = self.nbd.NBD()
+            nbd_handle.add_meta_context('base:allocation')
+            nbd_handle.connect_uri(nbd_uri_from_unix_socket(self.sock))
+            fd = os.open(self.local_path, os.O_WRONLY)
+
             copy.status = 'Copying'
             STATE.write()
             self._copy_all(nbd_handle, fd, final, keepalive)
             copy.status = 'Copied'
             copy.end_time = time.time()
-            if not final and len(self.copies) > 2:
+            if final:
+                if len(self.copies) > 1:
+                    self.copies[-2].snapshot = None
+            elif len(self.copies) > 2:
                 self.copies[-2].path = None
                 self.copies[-2].change_id = None
                 self.copies[-3].snapshot = None
             STATE.write()
+        except (STATE.pre_copy.pyvmomi.vim.fault.VimFault,
+                STATE.pre_copy.nbd.Error) as exc:
+            if final:
+                # TODO: Fail?  Retry?  What function should be handling that?
+                error('Error during final copy iteration', exception=True)
+                raise
+            logging.exception('Recoverable error during copy')
+            copy.status = 'Recoverable error during copy: %s' % exc
+            copy.error = True
+            STATE.write()
+            pass
         except Exception:
             self.status = 'Unrecoverable error during copy'
             copy.error = True
             STATE.write()
-
-            # TODO: asdf: figure out when do we try to recover
-
             raise
         finally:
             # No matter whether it failed or not, we do not need to keep the
             # snapshot, just the change_id
-            os.close(fd)
-            nbd_handle.shutdown()
+            if fd is not None:
+                os.close(fd)
+            if nbd_handle is not None:
+                nbd_handle.shutdown()
 
     def _copy_all(self, nbd_handle, fd, final, keepalive):
         copy = self.copy_ref(final)
@@ -473,7 +510,7 @@ class _PreCopyDisk(StateObject):
         self.status = 'Copying (getting block stats)'
         STATE.write()
 
-        blocks = get_block_status(nbd_handle, self.extents)
+        blocks = _get_block_status(nbd_handle, self.extents)
         data_blocks = [x for x in blocks if not x.flags & self.nbd.STATE_HOLE]
 
         logging.debug('Block status filtered down to %d data blocks',
@@ -484,6 +521,7 @@ class _PreCopyDisk(StateObject):
         if len(data_blocks) == 0:
             logging.debug('No extents have allocated data for disk: %s',
                           self.logname)
+            self.status = 'Copied'
             return
 
         copy.status = 'Copying'
@@ -520,17 +558,40 @@ class _PreCopyDisk(StateObject):
 
     def update_change_ids(self, orig_disk, device, snapshot):
         self.copies[-1].snapshot = snapshot
-        change_id = device.backing.changeId
+
+        # If previous copy failed, take that data into consideration as well
+        if self.copies[-1].error:
+            logging.debug('Previous copy failed, reusing change_id')
+            change_id = self.copies[-1].change_id
+        else:
+            change_id = device.backing.changeId
+            # This might happen for some special disks and we might need to
+            # handle it, although it is out of the question for now
+            if change_id is None:
+                raise RuntimeError('Missing changeId for a disk')
+            logging.debug('Disk "%s" has new changeId=%s',
+                          self.logname, change_id)
+
         new_filename = orig_disk.backing.fileName
-
-        # This might happen for some special disks and we might need to handle
-        # it, although it is out of the question for now
-        if change_id is None:
-            raise RuntimeError('Missing changeId for a disk')
-
-        logging.debug('Disk "%s" has new changeId=%s', self.logname, change_id)
         self.copies.append(CopyIterationData(change_id, new_filename))
         STATE.write()
+
+
+def _get_index_string(idx):
+    num_letters = (ord('z') - ord('a') + 1)
+    ret = ''
+    while True:
+        cur_idx = idx % num_letters
+        idx = idx // num_letters
+        ret = chr(ord('a') + cur_idx) + ret
+        if not idx:
+            return ret
+        idx = idx - 1
+
+
+def _get_overlay_path(tmp_dir, vm_name, idx):
+    filename = '%s-sd%s.qcow2' % (vm_name, _get_index_string(idx))
+    return os.path.join(tmp_dir, filename)
 
 
 class PreCopy(StateObject):
@@ -544,6 +605,7 @@ class PreCopy(StateObject):
         '_iteration_seconds',
         '_copy_trigger_path',
         '_pause_path',
+        '_vm_name',
 
         'disks',
     ]
@@ -557,6 +619,7 @@ class PreCopy(StateObject):
         '_iteration_seconds',
         '_copy_trigger_path',
         '_pause_path',
+        '_vm_name',
     ]
 
     qemu_progress_re = re.compile(r'\((\d+\.\d+)/100%\)')
@@ -603,6 +666,7 @@ class PreCopy(StateObject):
         if self._iteration_seconds < 0:
             raise RuntimeError('Invalid value for `iteration_seconds`')
         self._pause_path = os.path.join(RUN_DIR, 'pause_operations')
+        self._vm_name = data['vm_name']
 
         # Let others browse it
         add_perms_to_file(self._tmp_dir.name, stat.S_IXOTH, -1, -1)
@@ -670,18 +734,28 @@ class PreCopy(StateObject):
             disk_data.fixed = True
 
         # Check that all paths were changed
-        for k, v in six.iteritems(disk_map):
+        for k, v in disk_map.items():
             if not v.fixed:
                 raise RuntimeError('Disk path "%s" was '
                                    'not fixed in the domxml' % k)
 
         return ETree.tostring(tree)
 
-    def get_xml(self):
+    def _get_xml(self):
         xmlfile = os.path.join(self._tmp_dir.name, 'vm.xml')
         with open(xmlfile, 'wb') as f:
             f.write(self._fix_disks(self.vmware.get_domxml()))
         return xmlfile
+
+    def prepare_command(self, v2v_env, v2v_args):
+        v2v_env['LIBGUESTFS_CACHEDIR'] = self._tmp_dir.name
+        v2v_args.extend([
+            self._get_xml(),
+            '-i', 'libvirtxml',
+            # TODO: Remove later when v2v has support for direct commit
+            '--debug-overlays',
+            '--no-copy',
+        ])
 
     def _get_nbdkit_cmd(self, disk, filters, final):
         nbdkit_cmd = []
@@ -906,7 +980,12 @@ class PreCopy(StateObject):
             disk.copy(self.vmware.get_vm(), final, self.vmware.keepalive)
 
         self._stop_nbdkits()
-        self.vmware.clean_snapshot(final)
+
+        snaps_used = {c.snapshot for d in self.disks for c in d.copies}
+        # Needless, but clean
+        snaps_used = {s for s in snaps_used if s is not None}
+
+        self.vmware.clean_snapshot(snaps_used)
 
         for disk in self.disks:
             if disk.status == 'Copied':
@@ -915,15 +994,14 @@ class PreCopy(StateObject):
     def commit_overlays(self):
         "Commit all overlays to local disks."
 
-        for disk in self.disks:
-            if disk.overlay is None:
-                raise RuntimeError('Did not get any overlay data from v2v')
+        STATE.status = 'Finishing (committing overlays)'
 
         ndisks = len(self.disks)
         cmd_templ = ['qemu-img', 'commit', '-p']
-        for i, disk in enumerate(self.disks, start=1):
-            logging.debug('Committing disk %d/%d', i, ndisks)
-            cmd = cmd_templ + [disk.overlay]
+        for i, disk in enumerate(self.disks):
+            logging.debug('Committing disk %d/%d', i + 1, ndisks)
+            path = _get_overlay_path(self._tmp_dir.name, self._vm_name, i)
+            cmd = cmd_templ + [path]
             try:
                 disk.proc_qemu = subprocess.Popen(cmd,
                                                   stdout=subprocess.PIPE,
@@ -953,10 +1031,9 @@ class PreCopy(StateObject):
             disk.commit_progress = 100
             STATE.write()
             try:
-                os.remove(disk.overlay)
+                os.remove(path)
             except FileNotFoundError:
                 pass
-            disk.overlay = None
 
         self._wait_for_qemus(cb_progress, cb_done)
 
@@ -967,7 +1044,7 @@ class PreCopy(StateObject):
         # processes
         self._stop_nbdkits()
 
-        for disk in self.disks:
+        for i, disk in enumerate(self.disks):
             if disk.proc_qemu is None:
                 continue
             logging.debug('Stopping qemu-img with pid=%d', disk.proc_qemu.pid)
@@ -978,19 +1055,18 @@ class PreCopy(StateObject):
                 disk.proc_qemu.kill()
                 disk.proc_qemu.wait()
             disk.proc_qemu = None
-            if disk.overlay is not None:
-                try:
-                    os.remove(disk.overlay)
-                except FileNotFoundError:
-                    pass
-                except Exception:
-                    error('Cannot remove temporary file "%s", subsequent '
-                          'conversions of the same hose might fail if this '
-                          'file is not removed' % disk.overlay, exception=True)
-            disk.overlay = None
+            path = _get_overlay_path(self._tmp_dir.name, self._vm_name, i)
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            except Exception:
+                error('Cannot remove temporary file "%s", subsequent '
+                      'conversions of the same hose might fail if this '
+                      'file is not removed' % path, exception=True)
 
         try:
-            self.vmware.clean_snapshot(True)
+            self.vmware.clean_snapshot()
         except Exception:
             error('Error cleaning up snapshots after another error',
                   exception=True)

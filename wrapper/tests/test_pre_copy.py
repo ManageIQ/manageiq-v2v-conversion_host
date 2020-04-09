@@ -1,5 +1,6 @@
 import unittest
 from wrapper.pre_copy import _VMWare, PreCopy
+from wrapper.pre_copy import _get_overlay_path, _get_index_string
 
 
 class TestPreCopy(unittest.TestCase):
@@ -104,3 +105,63 @@ class TestPreCopy(unittest.TestCase):
         self.assertEqual(vmw.user, 'user@domain')
         self.assertEqual(vmw.server, 'some.remote.server')
         self.assertEqual(vmw.port, 443)
+
+    def test_get_index_string_basic(self):
+        """ Test mapping disk indices to string. """
+        self.assertEqual(_get_index_string(0), 'a')
+        self.assertEqual(_get_index_string(1), 'b')
+        self.assertEqual(_get_index_string(5), 'f')
+        self.assertEqual(_get_index_string(25), 'z')
+
+        # Last positions in multi-digit numbers is treated differently, because
+        # that's how the naming works out.
+
+        #                                  a      a
+        self.assertEqual(_get_index_string(1 * 26 + 0), 'aa')
+        #                                  a             a        a
+        self.assertEqual(_get_index_string(1 * 26 * 26 + 1 * 26 + 0), 'aaa')
+
+        self.assertEqual(_get_index_string(1 * (26 ** 3) +  # a
+                                           1 * (26 ** 2) +  # a
+                                           1 * (26 ** 1) +  # a
+                                           0 * (26 ** 0)),  # a
+                         'aaaa')
+
+        self.assertEqual(_get_index_string(1*(26**4) +  # you
+                                           1 * (26 ** 3) +  # get
+                                           1*(26**2) +  # the
+                                           1*(26**1) +  # point,
+                                           0*(26**0)),  # right?
+                         'aaaaa')
+
+    def test_get_index_string_transitions(self):
+        """ Test mapping disk indices to string. """
+
+        def str_idx(s):
+            ret = ord(s[-1]) - ord('a')
+            for i, c in enumerate(s[-2::-1], start=1):
+                ret += (ord(c) - ord('a') + 1) * (26 ** i)
+            return ret
+
+        def str_idx_eq(idx):
+            self.assertEqual(str_idx(_get_index_string(idx)), idx)
+
+        # Test first 1024 disk names.
+        #
+        # This is here so that it can be easily changed to test more of them in
+        # case of a failure later on, but I tested it for up to 26**5 with this
+        # function and against linux kernel code up to 'jjjj'.
+        for i in range(1024):
+            str_idx_eq(i)
+
+    def test_get_disk_path(self):
+        """ Check that overlay paths are constructed properly. """
+
+        self.assertEqual(_get_overlay_path('/some/temp/path', 'MyVM', 0),
+                         '/some/temp/path/MyVM-sda.qcow2')
+        self.assertEqual(_get_overlay_path('/other/path', 'vmName', 27),
+                         '/other/path/vmName-sdab.qcow2')
+        self.assertEqual(_get_overlay_path('/other/path', 'vmName', 51),
+                         '/other/path/vmName-sdaz.qcow2')
+        self.assertEqual(_get_overlay_path('/an/other/one', 'test', 18277),
+                         '/an/other/one/test-sdzzz.qcow2')

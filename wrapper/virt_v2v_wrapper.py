@@ -29,6 +29,7 @@ import time
 
 from .state import STATE, Disk
 from .common import error, hard_error, log_command_safe, write_password
+from .common import setup_signals, disable_interrupt
 from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR
 from .hosts import detect_host
 from .log_parser import log_parser
@@ -48,6 +49,14 @@ LOG_LEVEL = logging.DEBUG
 #
 
 def prepare_command(data, v2v_caps, agent_sock=None):
+    # Prepare environment
+    v2v_env = os.environ.copy()
+    v2v_env['LANG'] = 'C'
+    logging.debug('Using direct backend. Hack, hack...')
+    v2v_env['LIBGUESTFS_BACKEND'] = 'direct'
+    if agent_sock is not None:
+        v2v_env['SSH_AUTH_SOCK'] = agent_sock
+
     v2v_args = [
         '-v', '-x',
         '--root', 'first',
@@ -55,13 +64,7 @@ def prepare_command(data, v2v_caps, agent_sock=None):
     ]
 
     if STATE.pre_copy:
-        v2v_args.extend([
-            STATE.pre_copy.get_xml(),
-            '-i', 'libvirtxml',
-            # TODO: Remove later when v2v has support for direct commit
-            '--debug-overlays',
-            '--no-copy',
-        ])
+        STATE.pre_copy.prepare_command(v2v_env, v2v_args)
     else:
         if data['transport_method'] == 'vddk':
             v2v_args.extend([
@@ -100,14 +103,6 @@ def prepare_command(data, v2v_caps, agent_sock=None):
                 )
             ])
 
-    # Prepare environment
-    v2v_env = os.environ.copy()
-    v2v_env['LANG'] = 'C'
-    logging.debug('Using direct backend. Hack, hack...')
-    v2v_env['LIBGUESTFS_BACKEND'] = 'direct'
-    if agent_sock is not None:
-        v2v_env['SSH_AUTH_SOCK'] = agent_sock
-
     return (v2v_args, v2v_env)
 
 
@@ -117,7 +112,8 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
     v2v_args, v2v_env = host.prepare_command(
         data, v2v_args, v2v_env, v2v_caps)
 
-    logging.info('Starting virt-v2v:')
+    STATE.status = 'Starting virt-v2v'
+    logging.info(STATE.status)
     log_command_safe(v2v_args, v2v_env)
 
     runner = SubprocessRunner(v2v_args, v2v_env, STATE.v2v_log)
@@ -286,6 +282,7 @@ def main():
             hard_error("This output does not support two-phase conversion")
         STATE.pre_copy.init_disk_data()
 
+    setup_signals()
     try:
         #
         # NOTE: don't use hard_error() beyond this point!
@@ -427,22 +424,26 @@ def validate_data(host, data):
     STATE.pre_copy = PreCopy(data)
 
 
+@disable_interrupt
 def finish(host, data):
     if STATE.failed:
         # Perform cleanup after failed conversion
         logging.debug('Cleanup phase')
         # Need to clean up as much as possible, even if only one tiny clean up
         # function fails
-        try:
-            host.handle_cleanup(data)
-        except Exception:
-            logging.exception("Got exception while cleaning up data")
 
+        # Clean-up pre-copy stuff first so that host-related resources are not
+        # used any more
         if STATE.pre_copy:
             try:
                 STATE.pre_copy.cleanup()
             except Exception:
                 logging.exception("Got exception while cleaning up data")
+
+        try:
+            host.handle_cleanup(data)
+        except Exception:
+            logging.exception("Got exception while cleaning up data")
 
     # Remove password files
     logging.info('Removing password files')

@@ -23,7 +23,6 @@ setup(
     },
     install_requires=[
         'pycurl',
-        'six',
         'libvirt-python',
         'pyvmomi',
         'packaging',

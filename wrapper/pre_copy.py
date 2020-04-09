@@ -653,7 +653,9 @@ class PreCopy(StateObject):
         import nbd
         self.nbd = nbd
 
-        self._tmp_dir = tempfile.TemporaryDirectory(prefix='v2v-')
+        self._tmp_dir = tempfile.TemporaryDirectory(
+                prefix='v2v-',
+                dir=os.environ.get('LIBGUESTFS_CACHEDIR', '/var/tmp'))
 
         self.disks = None
 

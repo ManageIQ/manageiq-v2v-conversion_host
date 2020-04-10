@@ -85,6 +85,12 @@ sh build.sh install
 %endif # %if 0%{ansible_only} == 0
 
 %changelog
+* Fri Apr 10 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.3.0-1
+- Wrapper changes:
+  * Enable two phase migration with SSH transport (#39)
+  * Increase disk operations timeout (#40)
+  * Various bugfixes and cleanups (#41, #45, #46)
+
 * Tue Mar 24 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.2.0-1
 - Wrapper changes:
   * make pyvmomi optional -- it is only needed for two-phase and warm migration (#28)

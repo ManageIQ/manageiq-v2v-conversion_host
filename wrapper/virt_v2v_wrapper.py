@@ -30,11 +30,10 @@ import time
 from .state import STATE, Disk
 from .common import error, hard_error, log_command_safe, write_password
 from .common import setup_signals, disable_interrupt
-from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR
+from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR, VIRT_V2V
 from .hosts import detect_host
 from .log_parser import log_parser
 from .checks import CHECKS
-from .runners import SubprocessRunner
 from .pre_copy import PreCopy
 from .meta import VERSION, RELEASE
 
@@ -116,36 +115,48 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
     logging.info(STATE.status)
     log_command_safe(v2v_args, v2v_env)
 
-    runner = SubprocessRunner(v2v_args, v2v_env, STATE.v2v_log)
-    try:
-        runner.run()
-    except RuntimeError:
-        error('Failed to start virt-v2v', exception=True)
-        STATE.failed = True
-        STATE.write()
-        return
-    STATE.pid = runner.pid
+    with open(STATE.v2v_log, 'w') as log:
+        try:
+            v2v_proc = subprocess.Popen(
+                [VIRT_V2V] + v2v_args,
+                stdin=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+                stdout=log,
+                env=v2v_env,
+            )
+        except RuntimeError:
+            error('Failed to start virt-v2v', exception=True)
+            STATE.failed = True
+            STATE.write()
+            return
+        STATE.pid = v2v_proc.pid
 
-    try:
-        STATE.started = True
-        STATE.write()
-        with log_parser(STATE.internal['duplicate_logs']) as parser:
-            while runner.is_running():
+        try:
+            STATE.started = True
+            STATE.write()
+            with log_parser(STATE.internal['duplicate_logs']) as parser:
+                while v2v_proc.poll() is not None:
+                    parser.parse()
+                    STATE.write()
+                    host.update_progress()
+                    time.sleep(5)
+                logging.info(
+                    'virt-v2v terminated with return code %d',
+                    v2v_proc.returncode)
                 parser.parse()
-                STATE.write()
-                host.update_progress()
-                time.sleep(5)
-            logging.info(
-                'virt-v2v terminated with return code %d',
-                runner.return_code)
-            parser.parse()
-    except Exception:
-        STATE.failed = True
-        error('Error while monitoring virt-v2v', exception=True)
-        logging.info('Killing virt-v2v process')
-        runner.kill()
+        except Exception:
+            STATE.failed = True
+            error('Error while monitoring virt-v2v', exception=True)
+            logging.info('Terminating virt-v2v process gracefully')
+            v2v_proc.terminate()
+            try:
+                v2v_proc.wait(5)
+            except subprocess.TimeoutExpired:
+                logging.info('Killing virt-v2v process')
+                v2v_proc.kill()
+                v2v_proc.poll()
 
-    STATE.return_code = runner.return_code
+    STATE.return_code = v2v_proc.returncode
     STATE.write()
 
     if STATE.return_code != 0:

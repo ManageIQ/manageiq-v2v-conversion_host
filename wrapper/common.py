@@ -12,6 +12,8 @@ import tempfile
 from .state import STATE
 
 
+VIRT_V2V = '/usr/bin/virt-v2v'
+
 RUN_DIR = '/var/lib/uci'
 LOG_DIR = '/var/log/uci'
 

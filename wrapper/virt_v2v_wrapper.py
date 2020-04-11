@@ -55,6 +55,7 @@ def prepare_command(data, v2v_caps, agent_sock=None):
     v2v_env['LANG'] = 'C'
     logging.debug('Using direct backend. Hack, hack...')
     v2v_env['LIBGUESTFS_BACKEND'] = 'direct'
+    v2v_env['LIBGUESTFS_CACHEDIR'] = STATE.tmp_dir()
     if agent_sock is not None:
         v2v_env['SSH_AUTH_SOCK'] = agent_sock
 
@@ -466,6 +467,10 @@ def finish(host, data):
             logging.exception("Got exception while cleaning up data")
 
     # Remove password files
+    #
+    # These will eventually be removed in STATE.finish(), but until that is
+    # tested (and maybe more stuff is moved to the STATE object, which might
+    # become the WrapperApp object at some point) this stays here to be sure.
     logging.info('Removing password files')
     for f in STATE.internal['password_files']:
         try:

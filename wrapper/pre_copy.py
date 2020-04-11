@@ -6,9 +6,7 @@ import fcntl
 import libvirt
 import logging
 import re
-import stat
 import subprocess
-import tempfile
 import time
 import xml.etree.ElementTree as ETree
 
@@ -18,7 +16,7 @@ from urllib.parse import urlparse, unquote, quote, parse_qs
 
 from .state import STATE, StateObject
 from .common import RUN_DIR, VDDK_LIBDIR, VDDK_LIBRARY_PATH, error
-from .utils import add_perms_to_file, nbd_uri_from_unix_socket
+from .utils import nbd_uri_from_unix_socket
 
 
 _TIMEOUT = 10
@@ -359,7 +357,7 @@ class _PreCopyDisk(StateObject):
         'sock',
     ]
 
-    def __init__(self, nbd, disk, tmp_dir):
+    def __init__(self, nbd, disk):
         self.nbd = nbd
         self.label = disk.deviceInfo.label
         self.local_path = None
@@ -368,8 +366,10 @@ class _PreCopyDisk(StateObject):
         self.key = disk.key
         self.logname = '%s(key=%s)' % (self.label, self.key)
 
-        self.sock = os.path.join(tmp_dir, 'nbdkit-%s.sock' % self.key)
-        self.pidfile = os.path.join(tmp_dir, 'nbdkit-%s.pid' % self.key)
+        self.sock = os.path.join(STATE.tmp_dir(),
+                                 'nbdkit-%s.sock' % self.key)
+        self.pidfile = os.path.join(STATE.tmp_dir(),
+                                    'nbdkit-%s.pid' % self.key)
         self.proc_nbdkit = None
         self.proc_qemu = None
 
@@ -594,14 +594,13 @@ def _get_index_string(idx):
         idx = idx - 1
 
 
-def _get_overlay_path(tmp_dir, vm_name, idx):
+def _get_overlay_path(vm_name, idx):
     filename = '%s-sd%s.qcow2' % (vm_name, _get_index_string(idx))
-    return os.path.join(tmp_dir, filename)
+    return os.path.join(STATE.tmp_dir(), filename)
 
 
 class PreCopy(StateObject):
     __slots__ = [
-        '_tmp_dir',
         'vmware',
         '_vmware_password_file',
         '_transport_method',
@@ -616,7 +615,6 @@ class PreCopy(StateObject):
     ]
 
     _hidden = [
-        '_tmp_dir',
         'vmware',
         '_vmware_password_file',
         'warm',
@@ -658,10 +656,6 @@ class PreCopy(StateObject):
         import nbd
         self.nbd = nbd
 
-        self._tmp_dir = tempfile.TemporaryDirectory(
-                prefix='v2v-',
-                dir=os.environ.get('LIBGUESTFS_CACHEDIR', '/var/tmp'))
-
         self.disks = None
 
         self.vmware = _VMWare(data)
@@ -674,15 +668,6 @@ class PreCopy(StateObject):
             raise RuntimeError('Invalid value for `iteration_seconds`')
         self._pause_path = os.path.join(RUN_DIR, 'pause_operations')
         self._vm_name = data['vm_name']
-
-        # Let others browse it
-        add_perms_to_file(self._tmp_dir.name, stat.S_IXOTH, -1, -1)
-
-    def __del__(self):
-        # This is mostly for tests, but neither the object nor the
-        # TemporaryDirectory object should be used multiple times anyway.
-        if hasattr(self, '_tmp_dir') and self._tmp_dir is not None:
-            self._tmp_dir.cleanup()
 
     def init_disk_data(self):
         "Updates data about disks in the remote VM"
@@ -702,8 +687,7 @@ class PreCopy(StateObject):
         disks = self.vmware.get_disks_from_config(vm.config)
 
         logging.debug('Creating disks based on data from pyvmomi: %r', disks)
-        self.disks = [_PreCopyDisk(self.nbd, d, self._tmp_dir.name)
-                      for d in disks]
+        self.disks = [_PreCopyDisk(self.nbd, d) for d in disks]
         STATE.disks = self.disks
         STATE.write()
 
@@ -750,13 +734,12 @@ class PreCopy(StateObject):
         return ETree.tostring(tree)
 
     def _get_xml(self):
-        xmlfile = os.path.join(self._tmp_dir.name, 'vm.xml')
+        xmlfile = os.path.join(STATE.tmp_dir(), 'vm.xml')
         with open(xmlfile, 'wb') as f:
             f.write(self._fix_disks(self.vmware.get_domxml()))
         return xmlfile
 
     def prepare_command(self, v2v_env, v2v_args):
-        v2v_env['LIBGUESTFS_CACHEDIR'] = self._tmp_dir.name
         v2v_args.extend([
             self._get_xml(),
             '-i', 'libvirtxml',
@@ -919,8 +902,7 @@ class PreCopy(StateObject):
             orig_disk = self.vmware.get_disk_by_key(config, device.key)
             if not disk:
                 # Start tracking the disk now
-                self.disks.append(_PreCopyDisk(self.nbd, orig_disk,
-                                               self._tmp_dir.name))
+                self.disks.append(_PreCopyDisk(self.nbd, orig_disk))
             elif len(disk) == 1:
                 disk[0].update_change_ids(orig_disk, device, snapshot)
             else:
@@ -1009,7 +991,7 @@ class PreCopy(StateObject):
         for i, disk in enumerate(self.disks):
             logging.debug('Committing disk %d/%d: %s',
                           i + 1, ndisks, disk.logname)
-            path = _get_overlay_path(self._tmp_dir.name, self._vm_name, i)
+            path = _get_overlay_path(self._vm_name, i)
             cmd = cmd_templ + [path]
             try:
                 disk.proc_qemu = subprocess.Popen(cmd,
@@ -1064,7 +1046,7 @@ class PreCopy(StateObject):
                 disk.proc_qemu.kill()
                 disk.proc_qemu.wait()
             disk.proc_qemu = None
-            path = _get_overlay_path(self._tmp_dir.name, self._vm_name, i)
+            path = _get_overlay_path(self._vm_name, i)
             try:
                 os.remove(path)
             except FileNotFoundError:

@@ -1,6 +1,6 @@
 import unittest
 from wrapper.pre_copy import _VMWare, PreCopy
-from wrapper.pre_copy import _get_overlay_path, _get_index_string
+from wrapper.pre_copy import _get_index_string
 
 
 class TestPreCopy(unittest.TestCase):
@@ -176,15 +176,3 @@ class TestPreCopy(unittest.TestCase):
         # function and against linux kernel code up to 'jjjj'.
         for i in range(1024):
             str_idx_eq(i)
-
-    def test_get_disk_path(self):
-        """ Check that overlay paths are constructed properly. """
-
-        self.assertEqual(_get_overlay_path('/some/temp/path', 'MyVM', 0),
-                         '/some/temp/path/MyVM-sda.qcow2')
-        self.assertEqual(_get_overlay_path('/other/path', 'vmName', 27),
-                         '/other/path/vmName-sdab.qcow2')
-        self.assertEqual(_get_overlay_path('/other/path', 'vmName', 51),
-                         '/other/path/vmName-sdaz.qcow2')
-        self.assertEqual(_get_overlay_path('/an/other/one', 'test', 18277),
-                         '/an/other/one/test-sdzzz.qcow2')

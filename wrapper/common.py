@@ -116,7 +116,7 @@ def log_command_safe(args, env, log=None):
 
 
 def write_password(password, host):
-    pfile = tempfile.mkstemp(suffix='.v2v')
+    pfile = tempfile.mkstemp(suffix='.v2v', dir=STATE.tmp_dir())
     STATE.internal['password_files'].append(pfile[1])
     os.fchown(pfile[0], host.get_uid(), host.get_gid())
     os.write(pfile[0], bytes(password.encode('utf-8')))

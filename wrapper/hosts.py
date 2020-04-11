@@ -547,7 +547,8 @@ class OpenstackHost(_BaseHost):
     def prepare_command(self, data, v2v_args, v2v_env, v2v_caps):
         """ Prepare virt-v2v command parts that are method dependent """
         if data['two_phase']:
-            self._tmp_dir = tempfile.TemporaryDirectory(prefix='v2v-osp-')
+            self._tmp_dir = tempfile.TemporaryDirectory(prefix='v2v-osp-',
+                                                        dir=STATE.tmp_dir())
             osp_wrapper_create(self._tmp_dir.name,
                                'openstack',
                                [x.id for x in self._created_disks],

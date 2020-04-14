@@ -380,6 +380,8 @@ class _PreCopyDisk(StateObject):
 
         self.commit_progress = None
 
+        logging.debug('New disk: %s of size %d B', self.logname, self.size)
+
         self.copies = [CopyIterationData('*', disk.backing.fileName)]
 
     def copy_ref(self, final):
@@ -390,15 +392,18 @@ class _PreCopyDisk(StateObject):
         offset = 0
         copy = self.copy_ref(final)
 
-        logging.debug('Requesting changed disk areas for '
+        logging.debug('Requesting changed disk areas of disk %s, for '
                       'snapshot "%s" with change id "%s"',
-                      copy.snapshot, copy.change_id)
+                      self.logname, copy.snapshot, copy.change_id)
 
         while offset < self.size:
+            logging.debug('Querying from offset %d', offset)
             tmp = vm.QueryChangedDiskAreas(copy.snapshot,
                                            int(self.key),
                                            offset,
                                            copy.change_id)
+            logging.debug('Received %d areas of length %d',
+                          len(tmp.changedArea), tmp.length)
             self.extents += tmp.changedArea
             offset += tmp.startOffset + tmp.length
 
@@ -696,6 +701,7 @@ class PreCopy(StateObject):
 
         disks = self.vmware.get_disks_from_config(vm.config)
 
+        logging.debug('Creating disks based on data from pyvmomi: %r', disks)
         self.disks = [_PreCopyDisk(self.nbd, d, self._tmp_dir.name)
                       for d in disks]
         STATE.disks = self.disks
@@ -978,7 +984,7 @@ class PreCopy(StateObject):
 
         ndisks = len(self.disks)
         for i, disk in enumerate(self.disks, start=1):
-            logging.debug('Copying disk %d/%d', i, ndisks)
+            logging.debug('Copying disk %d/%d: %s', i, ndisks, disk.logname)
             disk.copy(self.vmware.get_vm(), final, self.vmware.keepalive)
 
         self._stop_nbdkits()
@@ -1001,7 +1007,8 @@ class PreCopy(StateObject):
         ndisks = len(self.disks)
         cmd_templ = ['qemu-img', 'commit', '-p']
         for i, disk in enumerate(self.disks):
-            logging.debug('Committing disk %d/%d', i + 1, ndisks)
+            logging.debug('Committing disk %d/%d: %s',
+                          i + 1, ndisks, disk.logname)
             path = _get_overlay_path(self._tmp_dir.name, self._vm_name, i)
             cmd = cmd_templ + [path]
             try:

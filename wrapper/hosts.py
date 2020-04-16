@@ -609,7 +609,7 @@ class OpenstackHost(_BaseHost):
 
         servers = self._run_openstack(['server', 'list',
                                        '-f', 'value', '-c', 'Name'],
-                                      data)
+                                      data).split()
         if data['vm_name'] in servers:
             hard_error('VM with the name "%s" already exists on the '
                        'destination' % data['vm_name'])

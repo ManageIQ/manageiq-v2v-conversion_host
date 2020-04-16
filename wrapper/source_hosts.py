@@ -139,13 +139,10 @@ class OpenStackSourceHost(_BaseSourceHost):
         except ImportError:
             raise RuntimeError('OpenStack SDK is not installed on this '
                                'conversion host!')
-        osp_arg_list = ['os-auth_url', 'os-username', 'os-password',
-                        'os-project_name', 'os-project_domain_name',
-                        'os-user_domain_name']
 
         # Create a connection to the source cloud
         osp_env = data['osp_source_environment']
-        osp_args = {arg[3:].lower(): osp_env[arg] for arg in osp_arg_list}
+        osp_args = {arg[3:].lower(): osp_env[arg] for arg in osp_env}
         osp_args['verify'] = not data.get('insecure_connection', False)
         self.source_converter = data['osp_source_conversion_vm_id']
         self.source_instance = data['osp_source_vm_id']
@@ -153,7 +150,7 @@ class OpenStackSourceHost(_BaseSourceHost):
 
         # Create a connection to the destination cloud
         osp_env = data['osp_environment']
-        osp_args = {arg[3:].lower(): osp_env[arg] for arg in osp_arg_list}
+        osp_args = {arg[3:].lower(): osp_env[arg] for arg in osp_env}
         osp_args['verify'] = not data.get('insecure_connection', False)
         self.dest_converter = data['osp_server_id']
         self.dest_conn = openstack.connect(**osp_args)

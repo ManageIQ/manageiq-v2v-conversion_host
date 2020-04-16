@@ -23,7 +23,7 @@ import subprocess
 import time
 from collections import namedtuple
 
-from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR
+from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR, disable_interrupt
 from .hosts import OpenstackHost
 from .state import STATE, Disk
 from .pre_copy import PreCopy
@@ -192,6 +192,7 @@ class OpenStackSourceHost(_BaseSourceHost):
         self._attach_volumes_to_converter()
         self._export_volumes_from_converter()
 
+    @disable_interrupt
     def close_exports(self):
         """ Put the source VM's volumes back where they were. """
         self._converter_close_exports()

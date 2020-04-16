@@ -190,14 +190,14 @@ Example:
 			"os-user_domain_name": "Default"
 		},
 		"osp_source_vm_id": "c28d5a15-0372-4222-95d3-13055f3c6a9b",
-		"osp_source_conversion_vm_id": "5143dba7-c8ac-4230-ac9a-dbd21788f209"
+		"osp_source_conversion_vm_id": "5143dba7-c8ac-4230-ac9a-dbd21788f209",
 		"osp_source_environment": {
 			"os-auth_url": "http://192.168.75.19:5000/v3",
 			"os-username": "new-migration-user",
 			"os-password": "migrate",
 			"os-project_name": "migration-source",
 			"os-project_domain_name": "Default",
-			"os-user_domain_name": "Default",
+			"os-user_domain_name": "Default"
 		},
 		"uci_container": "v2v-conversion-host-rhel8",
 		"ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n...\n-----END OPENSSH PRIVATE KEY-----\n"

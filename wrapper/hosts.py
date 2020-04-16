@@ -674,6 +674,8 @@ class OpenstackHost(_BaseHost):
             logging.error(
                 'Command exited with non-zero return code %d, output:\n%s\n',
                 e.returncode, e.output)
+            if e.stderr:
+                logging.error('Contents of stderr:\n%s\n', e.stderr)
             return None
         if output.stderr:
             logging.warn('Command ran successfully, but '

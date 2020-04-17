@@ -181,7 +181,8 @@ class OpenStackSourceHost(_BaseSourceHost):
             self.source_disks = data['source_disks']
 
         # Allow UCI container ID (or name) to be passed in input JSON
-        self.uci_container = data.get('uci_container', 'v2v-conversion-host')
+        self.uci_container = data.get('uci_container_image',
+                                      'v2v-conversion-host')
 
     def prepare_exports(self):
         """ Attach the source VM's volumes to the source conversion host. """

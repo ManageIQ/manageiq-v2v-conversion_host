@@ -148,12 +148,13 @@ type disk struct {
 }
 
 type nic struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Mac       string `json:"mac"`
-	Interface string `json:"interface"`
-	NetID     string `json:"netid"`
-	NetName   string `json:"netname"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Mac         string `json:"mac"`
+	Interface   string `json:"interface"`
+	NetName     string `json:"netname"`
+	VnicID      string `json:"vnicid"`
+	VnicNetName string `json:"vnicnetname"`
 }
 
 func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
@@ -276,17 +277,20 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 			return "", err
 		}
 		vnic := profile.(*ovirtsdk.VnicProfile)
+		if vnicID, ok := vnic.Id(); ok {
+			nic.VnicID = vnicID
+		}
 		networkLink, _ := vnic.Network()
 		network, err := c.conn.FollowLink(networkLink)
 		if err != nil {
 			return "", err
 		}
 		net := network.(*ovirtsdk.Network)
-		if id, ok := net.Id(); ok {
-			nic.NetID = id
-		}
 		if name, ok := net.Name(); ok {
 			nic.NetName = name
+			if vnicName, ok := vnic.Name(); ok {
+				nic.VnicNetName = name + "/" + vnicName
+			}
 		}
 		vm.Nics = append(vm.Nics, *nic)
 	}

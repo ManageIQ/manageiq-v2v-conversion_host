@@ -40,7 +40,7 @@ const (
 	PhaseConnectionSuccessful  VirtualMachineProviderPhase = "ConnectionVerified"
 	PhaseConnectionFailed      VirtualMachineProviderPhase = "Failed"
 	PhaseLoadingVmsList        VirtualMachineProviderPhase = "LoadingVmsList"
-	PhaseLoadingVmsListFailed  VirtualMachineProviderPhase = "LoadingVmsList"
+	PhaseLoadingVmsListFailed  VirtualMachineProviderPhase = "LoadingVmsListFailed"
 	PhaseLoadingVMDetail       VirtualMachineProviderPhase = "LoadingVmDetail"
 	PhaseLoadingVMDetailFailed VirtualMachineProviderPhase = "LoadingVmDetailFailed"
 )

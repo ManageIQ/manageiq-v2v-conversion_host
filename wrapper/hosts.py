@@ -609,7 +609,7 @@ class OpenstackHost(_BaseHost):
 
         servers = self._run_openstack(['server', 'list',
                                        '-f', 'value', '-c', 'Name'],
-                                      data)
+                                      data).split()
         if data['vm_name'] in servers:
             hard_error('VM with the name "%s" already exists on the '
                        'destination' % data['vm_name'])
@@ -674,6 +674,8 @@ class OpenstackHost(_BaseHost):
             logging.error(
                 'Command exited with non-zero return code %d, output:\n%s\n',
                 e.returncode, e.output)
+            if e.stderr:
+                logging.error('Contents of stderr:\n%s\n', e.stderr)
             return None
         if output.stderr:
             logging.warn('Command ran successfully, but '

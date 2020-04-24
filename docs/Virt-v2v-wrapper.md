@@ -71,7 +71,7 @@ point the following key is mandatory:
 * `conversion_host_uuid`: the UUID of a VM in which the actual conversion is
   being performed.
 
-Output configuration: reffer to the section [Output
+Output configuration: refer to the section [Output
 configuration](#output-configuration) below.
 
 Miscellaneous:
@@ -97,6 +97,125 @@ Debugging:
 All keys in this section are subject to change without notice and should not be relied upon.  They exist *only* for debugging.
 
 * `rhv_debug`: optional key to enable debugging of `ovirtsdk4` API calls.
+
+OpenStack instance migration is supported, but only to another OpenStack cloud.
+OpenStack VMs cannot currently be migrated to RHV, for example. To set up a
+migration from OpenStack to OpenStack, the source and destination clouds must
+be configured with conversion host instances as shown in the sub-topics below.
+The migration works by attaching volumes to the source and destination
+conversion hosts and transferring data from inside the conversion hosts over
+SSH.
+
+Currently, both source and destination conversion hosts expect to run inside a
+Universal Conversion Image (UCI) provided by this project:
+https://github.com/ManageIQ/manageiq-v2v-conversion_host-build
+
+Specifically, the appliance version of the UCI should be uploaded to source and
+destination OpenStack clouds as an image, and conversion host instances should
+be created from those images. Log in as `cloud-user` and check the output of
+`sudo podman images`. There should be a pre-configured container named
+`v2v-conversion-host` that contains the actual V2V-wrapper tooling.
+
+### Source OpenStack cloud
+
+* A conversion host instance must be launched from the UCI, in the same project
+as the VM that is going to be moved. Keeping the conversion host in the same
+project means that administrator credentials are not required for migration,
+assuming everything else is already configured.
+* The conversion host instance must have an IPv4 address that is accessible
+from the destination OpenStack cloud.
+* The conversion host instance must have SSH enabled in the security rules.
+* The conversion host instance must be configured for key-based SSH access from
+the destination conversion host instance (see input arguments below).
+* The source VM must be shut down.
+* If the source VM is launched from a volume, there must be space in the
+project's quota for one snapshot of that volume, and for one new volume to be
+created from that snapshot.
+* If the source VM is launched from an image, there must be space in the
+project's quota for one new image snapshotted from that base image, and one new
+volume that is the same size as that snapshot (this size may be checked in the
+VM's flavor specification).
+
+
+### Destination OpenStack cloud
+
+* A conversion host instance must be launched from the UCI, in the same way
+virt-v2v requires.
+* The destination conversion host must be configured to be able to log in to
+the source conversion host instance with an SSH key. The key can be specified
+in the `ssh_key` input argument, or stored in /home/cloud-user/.ssh. In
+addition, the `transport_method` input argument must be set to `ssh`.
+
+### OpenStack-specific inputs
+
+To initiate an OpenStack migration, the input file must have the following keys
+set:
+* `osp_source_vm_id`: The ID of the target VM to copy from the OpenStack source
+* `osp_source_conversion_vm_id`: The ID of the source conversion host instance
+* `osp_source_environment`: A set of sub-items to organize arguments for the
+source OpenStack cloud.
+  * `os-auth_url`: Public keystone URL for access to the OpenStack API
+  * `os-username`: Source OpenStack username. Currently only username/password
+  log-ins are supported for the source side.
+  * `os-password`: Source OpenStack password
+  * `os-user_domain_name`: Source OpenStack user domain
+  * `os-project_name`: Name of project containing source conversion host instance
+  * `os-project_domain_name`: Domain name of source project
+  * `os-verify`: Verify source OpenStack API certificate (true or false)
+* `uci_container_image`: The ID of the virt-v2v-wrapper container image inside the UCI on
+the source conversion host. This is needed so that the destination conversion
+host can run the second copy of the wrapper on the source. This defaults to
+`v2v-conversion-host`, which may not always match different builds of the UCI.
+
+Currently OpenStack source clouds can only be migrated to an OpenStack
+destination, so a full input JSON needs to include the OpenStack input
+parameters specified in `Openstack output` below.
+
+Example:
+
+	{
+		"vm_name": "migration-vm",
+		"transport_method": "ssh",
+		"insecure_connection": true,
+		"osp_destination_project_id": "46deadaba9234ed4bef28caa459bdd16",
+		"osp_flavor_id": "a96b2815-3525-4eea-9ab4-14ba58e17835",
+		"osp_security_groups_ids": ["d5366f19-c34f-493c-a816-b305085c8fae"],
+		"osp_server_id": "b9ca0b1b-0eba-45c4-8c0b-4f27457b72be",
+		"osp_environment": {
+			"os-auth_url": "http://192.168.55.9:5000/v3",
+			"os-username": "migration-user",
+			"os-password": "migrate",
+			"os-project_name": "migration-destination",
+			"os-project_domain_name": "Default",
+			"os-user_domain_name": "Default"
+		},
+		"osp_source_vm_id": "c28d5a15-0372-4222-95d3-13055f3c6a9b",
+		"osp_source_conversion_vm_id": "5143dba7-c8ac-4230-ac9a-dbd21788f209",
+		"osp_source_environment": {
+			"os-auth_url": "http://192.168.75.19:5000/v3",
+			"os-username": "new-migration-user",
+			"os-password": "migrate",
+			"os-project_name": "migration-source",
+			"os-project_domain_name": "Default",
+			"os-user_domain_name": "Default"
+		},
+		"uci_container_image": "v2v-conversion-host-rhel8",
+		"ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n...\n-----END OPENSSH PRIVATE KEY-----\n"
+	}
+
+OpenStack migrations assume the wrapper is running in a UCI container on both
+source and destination clouds. The wrapper serializes volume attachments by
+writing lock files to /var/lock, so this directory must be exposed to all
+destination instances if there are multiple migrations running concurrently. An
+example invocation from the destination conversion host looks like this:
+
+	sudo podman run --privileged --volume /dev:/dev --volume /etc/pki/ca-trust:/etc/pki/ca-trust --volume /var/tmp:/var/tmp --volume /v2v:/data --volume /v2v/lib:/var/lib/uci --volume /v2v/log:/var/log/uci --volume /opt/vmware-vix-disklib-distrib:/opt/vmware-vix-disklib-distrib --volume /var/lock:/var/lock v2v-conversion-host
+
+This assumes a working directory named /v2v. The conversion JSON should be
+placed in /v2v/input/conversion.json, and logs from the source conversion host
+should be copied to `/v2v/source_logs` at the end of the migration. In the
+event of a failure, there may be volumes or snapshots prefixed with
+`rhosp-migration`. These may be detached and deleted.
 
 ## Output configuration
 

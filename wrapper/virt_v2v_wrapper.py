@@ -32,6 +32,8 @@ from .common import error, hard_error, log_command_safe, write_password
 from .common import setup_signals, disable_interrupt
 from .common import RUN_DIR, LOG_DIR, VDDK_LIBDIR, VIRT_V2V
 from .hosts import detect_host
+from .source_hosts import detect_source_host, avoid_wrapper, migrate_instance
+from .exports import export_nbd
 from .log_parser import log_parser
 from .checks import CHECKS
 from .pre_copy import PreCopy
@@ -252,6 +254,9 @@ def main():
 
     # Read and parse input -- hopefully this should be safe to do as root
     data = json.load(sys.stdin)
+    if 'nbd_export_only' in data:
+        export_nbd(data['nbd_export_only'])
+        sys.exit(0)
     host = detect_host(data)
 
     # The logging is delayed until we now which user runs the wrapper.
@@ -364,7 +369,11 @@ def main():
             host.prepare_disks(data)
             STATE.pre_copy.copy_disks(data['vmware_password_file'])
         if not STATE.failed:
-            wrapper(host, data, virt_v2v_caps, agent_sock)
+            source_host = detect_source_host(data, agent_sock)
+            if avoid_wrapper(source_host, host):
+                migrate_instance(source_host, host)
+            else:  # TODO: allow connecting source hosts to virt-v2v
+                wrapper(host, data, virt_v2v_caps, agent_sock)
         if agent_pid is not None:
             os.kill(agent_pid, signal.SIGTERM)
 

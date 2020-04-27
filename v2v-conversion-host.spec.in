@@ -85,6 +85,12 @@ sh build.sh install
 %endif # %if 0%{ansible_only} == 0
 
 %changelog
+* Mon Apr 27 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.4.0-1
+- Wrapper changes
+  * allow OpenStack to OpenStack migrations (#33)
+  * terminating virt-v2v more gracefully on errors (#48)
+  * minor chnages (#49)
+
 * Fri Apr 10 2020 Tomáš Golembiovský <tgolembi@redhat.com> 2.3.0-1
 - Wrapper changes:
   * Enable two phase migration with SSH transport (#39)

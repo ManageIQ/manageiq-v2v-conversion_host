@@ -17,8 +17,8 @@ from contextlib import contextmanager
 from io import BytesIO
 from urllib.parse import urlparse
 
-from .common import error, hard_error, log_command_safe, add_perms_to_file
-from .common import disable_interrupt
+from .common import error, hard_error, log_command_safe, disable_interrupt
+from .utils import add_perms_to_file
 from .state import STATE
 from .osp_wrapper import osp_wrapper_create
 

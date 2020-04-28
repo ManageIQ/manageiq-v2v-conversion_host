@@ -17,8 +17,8 @@ from packaging import version
 from urllib.parse import urlparse, unquote, quote, parse_qs
 
 from .state import STATE, StateObject
-from .common import RUN_DIR, VDDK_LIBDIR, VDDK_LIBRARY_PATH
-from .common import add_perms_to_file, error, nbd_uri_from_unix_socket
+from .common import RUN_DIR, VDDK_LIBDIR, VDDK_LIBRARY_PATH, error
+from .utils import add_perms_to_file, nbd_uri_from_unix_socket
 
 
 _TIMEOUT = 10

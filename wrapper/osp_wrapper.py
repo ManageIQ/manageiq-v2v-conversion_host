@@ -2,7 +2,7 @@ import os
 import shutil
 import stat
 
-from wrapper.common import add_perms_to_file
+from wrapper.utils import add_perms_to_file
 
 _SCRIPT = r'''#!/bin/bash
 

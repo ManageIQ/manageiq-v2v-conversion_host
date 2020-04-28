@@ -3,6 +3,7 @@ package ovirtprovider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	v2vv1alpha1 "github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
 	"github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/controller/utils"
@@ -13,8 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -22,7 +25,10 @@ import (
 
 const ovirtSecretKey = "ovirt"
 
-var log = logf.Log.WithName("controller_ovirtprovider")
+var (
+	log        = logf.Log.WithName("controller_ovirtprovider")
+	timeToWait = time.Duration(5 * time.Minute)
+)
 
 // Add creates a new OVirtProvider Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -43,8 +49,22 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
+	// ignore status updates
+	p := predicate.Funcs{
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			old := e.ObjectOld.(*v2vv1alpha1.OVirtProvider)
+			new := e.ObjectNew.(*v2vv1alpha1.OVirtProvider)
+			if old.Status != new.Status {
+				// NO enqueue request
+				return false
+			}
+			// ENQUEUE request
+			return true
+		},
+	}
+
 	// Watch for changes to primary resource OVirtProvider
-	err = c.Watch(&source.Kind{Type: &v2vv1alpha1.OVirtProvider{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &v2vv1alpha1.OVirtProvider{}}, &handler.EnqueueRequestForObject{}, p)
 	if err != nil {
 		return err
 	}
@@ -94,21 +114,30 @@ func (r *ReconcileOVirtProvider) Reconcile(request reconcile.Request) (reconcile
 	}
 	reqLogger.Info("Connection secret retrieved.")
 
+	r.updateStatusPhase(request, v2vv1alpha1.PhaseConnecting)
+	client, err := getClient(context.Background(), connectionSecret)
+	if err != nil {
+		r.updateStatusPhase(request, v2vv1alpha1.PhaseConnectionFailed)
+		return r.checkTime(instance, err)
+	}
+	defer client.Close()
+
 	if len(instance.Spec.Vms) == 0 { // list of oVirt VMs is requested to be retrieved
-		err = r.readVmsList(request, connectionSecret)
+		err = r.readVmsList(request, client)
 		if err != nil {
 			reqLogger.Error(err, "Failed to read list of oVirt VMs.")
-			return reconcile.Result{}, err // request will be re-queued
+			return r.checkTime(instance, err)
 		}
-
-		return reconcile.Result{}, nil
+	} else {
+		// after re-queue when vms updated
+		r.updateStatusPhase(request, v2vv1alpha1.PhaseConnectionSuccessful)
 	}
 
 	// secret is present, list of VMs is available, let's check for  details to be retrieved
 	var lastError error = nil
 	for _, vm := range instance.Spec.Vms { // sequential read is probably good enough, just a single VM or a few of them are expected to be retrieved this way
 		if vm.DetailRequest {
-			err = r.readVMDetail(request, connectionSecret, &vm)
+			err = r.readVMDetail(request, client, &vm)
 			if err != nil {
 				reqLogger.Error(err, fmt.Sprintf("Failed to read '%s' vm details.", vm.Name))
 				lastError = err
@@ -117,6 +146,16 @@ func (r *ReconcileOVirtProvider) Reconcile(request reconcile.Request) (reconcile
 	}
 
 	return reconcile.Result{}, lastError
+}
+
+func (r *ReconcileOVirtProvider) checkTime(instance *v2vv1alpha1.OVirtProvider, err error) (reconcile.Result, error) {
+	diff := time.Now().Sub(instance.CreationTimestamp.Time)
+	if diff > timeToWait {
+		// do not re-queue
+		return reconcile.Result{}, nil
+	}
+	// wait for user to update the secret
+	return reconcile.Result{}, err
 }
 
 func (r *ReconcileOVirtProvider) fetchSecret(provider *v2vv1alpha1.OVirtProvider) (*corev1.Secret, error) {
@@ -135,16 +174,8 @@ func getClient(ctx context.Context, secret *corev1.Secret) (*Client, error) {
 }
 
 // read whole list at once
-func (r *ReconcileOVirtProvider) readVmsList(request reconcile.Request, connectionSecret *corev1.Secret) error {
+func (r *ReconcileOVirtProvider) readVmsList(request reconcile.Request, client *Client) error {
 	log.Info("readVmsList()")
-
-	r.updateStatusPhase(request, v2vv1alpha1.PhaseConnecting)
-	client, err := getClient(context.Background(), connectionSecret)
-	if err != nil {
-		r.updateStatusPhase(request, v2vv1alpha1.PhaseConnectionFailed)
-		return err
-	}
-	defer client.Close()
 
 	r.updateStatusPhase(request, v2vv1alpha1.PhaseLoadingVmsList)
 	vms, err := client.GetVMs()
@@ -197,19 +228,10 @@ func (r *ReconcileOVirtProvider) updateVmsList(request reconcile.Request, vms ma
 	return nil
 }
 
-func (r *ReconcileOVirtProvider) readVMDetail(request reconcile.Request, connectionSecret *corev1.Secret, vm *v2vv1alpha1.OVirtVM) error {
+func (r *ReconcileOVirtProvider) readVMDetail(request reconcile.Request, client *Client, vm *v2vv1alpha1.OVirtVM) error {
 	log.Info("readVmDetail()")
 
-	r.updateStatusPhase(request, v2vv1alpha1.PhaseConnecting)
-	client, err := getClient(context.Background(), connectionSecret)
-	if err != nil {
-		r.updateStatusPhase(request, v2vv1alpha1.PhaseConnectionFailed)
-		return err
-	}
-	defer client.Close()
-
 	r.updateStatusPhase(request, v2vv1alpha1.PhaseLoadingVMDetail)
-
 	vmDetail, err := client.GetVM(vm)
 	if err != nil {
 		r.updateStatusPhase(request, v2vv1alpha1.PhaseLoadingVMDetailFailed)

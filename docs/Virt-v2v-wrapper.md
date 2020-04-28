@@ -27,6 +27,18 @@ The expected usage is as follows:
 5)  *finalization*: when virt-v2v terminates wrapper updates the state file
     one last time and exits
 
+## Temporary files
+
+Any temporary files (even from any other tools spawned by the wrapper) are
+stored under a specific path and cleaned up after exit.  The path is
+configurable as it is determined based on environment variables in this manner:
+
+* `V2V_WRAPPER_TMPDIR` or, if if the variable is not set, then
+
+* `TMPDIR` to allow for a sane system default or
+
+* the literal path `/var/tmp` as a fallback if none of the above exist in the
+  environment
 
 ## Input Data
 

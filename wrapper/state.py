@@ -3,6 +3,8 @@ import os
 import json
 import stat
 
+from .utils import add_perms_to_file
+
 
 class StateObject(object):
     def as_dict(self):
@@ -55,6 +57,7 @@ class _State(StateObject):
         'v2v_log',
         'machine_readable_log',
         'wrapper_log',
+        '_tmp_dir',
 
         # These fields are written to the state file
         'disk_count',
@@ -87,6 +90,7 @@ class _State(StateObject):
         This function exists only so that the state can be re-used in tests
         """
 
+        self._tmp_dir = None
         self.state_file = None
         self.v2v_log = None
         self.machine_readable_log = None
@@ -120,7 +124,22 @@ class _State(StateObject):
             json.dump(self, f, cls=_StateEncoder)
             os.rename(tmp_state[1], self.state_file)
 
+    def tmp_dir(self):
+        if self._tmp_dir is None:
+            d = os.getenv('V2V_WRAPPER_TMPDIR')
+            if d is None:
+                d = os.getenv('TMPDIR', '/var/tmp')
+            self._tmp_dir = tempfile.TemporaryDirectory(prefix='v2v-', dir=d)
+
+            # Let others browse it
+            add_perms_to_file(self._tmp_dir.name, stat.S_IXOTH, -1, -1)
+
+        return self._tmp_dir.name
+
     def finish(self):
+        self._tmp_dir.cleanup()
+        self._tmp_dir = None
+
         if self.failed is None:
             self.failed = False
         self.finished = True

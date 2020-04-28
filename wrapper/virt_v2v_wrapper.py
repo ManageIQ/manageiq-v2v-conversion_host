@@ -475,10 +475,7 @@ def finish(host, data):
                   'Error removing password file: %s' % f,
                   exception=True)
 
-    if STATE.failed is None:
-        STATE.failed = False
-    STATE.finished = True
-    STATE.write()
+    STATE.finish()
 
 
 # }}}

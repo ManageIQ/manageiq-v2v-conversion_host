@@ -120,5 +120,11 @@ class _State(StateObject):
             json.dump(self, f, cls=_StateEncoder)
             os.rename(tmp_state[1], self.state_file)
 
+    def finish(self):
+        if self.failed is None:
+            self.failed = False
+        self.finished = True
+        self.write()
+
 
 STATE = _State()

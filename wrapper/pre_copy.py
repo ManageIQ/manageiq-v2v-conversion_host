@@ -1071,7 +1071,7 @@ class PreCopy(StateObject):
                 pass
             except Exception:
                 error('Cannot remove temporary file "%s", subsequent '
-                      'conversions of the same hose might fail if this '
+                      'conversions of the same host might fail if this '
                       'file is not removed' % path, exception=True)
 
         try:

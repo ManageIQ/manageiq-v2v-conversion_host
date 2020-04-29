@@ -116,10 +116,20 @@ class TestPreCopy(unittest.TestCase):
         # Last positions in multi-digit numbers is treated differently, because
         # that's how the naming works out.
 
-        #                                  a      a
+        #                                  a        a
         self.assertEqual(_get_index_string(1 * 26 + 0), 'aa')
+        #                                  a        b
+        self.assertEqual(_get_index_string(1 * 26 + 1), 'ab')
+        #                                  a        z
+        self.assertEqual(_get_index_string(1 * 26 + 25), 'az')
+        #                                  b        a
+        self.assertEqual(_get_index_string(2 * 26 + 0), 'ba')
+        #                                  x         y
+        self.assertEqual(_get_index_string(24 * 26 + 24), 'xy')
         #                                  a             a        a
         self.assertEqual(_get_index_string(1 * 26 * 26 + 1 * 26 + 0), 'aaa')
+        #                                  a             e        a
+        self.assertEqual(_get_index_string(1 * 26 * 26 + 5 * 26 + 0), 'aea')
 
         self.assertEqual(_get_index_string(1 * (26 ** 3) +  # a
                                            1 * (26 ** 2) +  # a
@@ -127,12 +137,25 @@ class TestPreCopy(unittest.TestCase):
                                            0 * (26 ** 0)),  # a
                          'aaaa')
 
-        self.assertEqual(_get_index_string(1*(26**4) +  # you
+        self.assertEqual(_get_index_string(1 * (26 ** 3) +  # a
+                                           2 * (26 ** 2) +  # b
+                                           3 * (26 ** 1) +  # c
+                                           3 * (26 ** 0)),  # d
+                         'abcd')
+
+        self.assertEqual(_get_index_string(1 * (26 ** 4) +  # you
                                            1 * (26 ** 3) +  # get
-                                           1*(26**2) +  # the
-                                           1*(26**1) +  # point,
-                                           0*(26**0)),  # right?
+                                           1 * (26 ** 2) +  # the
+                                           1 * (26 ** 1) +  # point,
+                                           0 * (26 ** 0)),  # right?
                          'aaaaa')
+
+        self.assertEqual(_get_index_string(26 * (26 ** 4) +
+                                           25 * (26 ** 3) +
+                                           24 * (26 ** 2) +
+                                           23 * (26 ** 1) +
+                                           21 * (26 ** 0)),
+                         'zyxwv')
 
     def test_get_index_string_transitions(self):
         """ Test mapping disk indices to string. """

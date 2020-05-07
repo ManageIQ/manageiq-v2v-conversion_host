@@ -78,6 +78,10 @@ class TestOutputParser(unittest.TestCase):
                 state,
                 b'nbdkit: debug: Opening file [store1] /path1.vmdk (ha-nfcssl://[store1] path1.vmdk@1.2.3.4:902)')  # NOQA
             self.assertEqual(parser._current_path, '[store1] /path1.vmdk')
+            parser.parse_line(
+                state,
+                b'nbdkit: vddk[1]: debug: Opening file [store2] /path2.vmdk (ha-nfcssl://[store2] path2.vmdk@1.2.3.4:902)')  # NOQA
+            self.assertEqual(parser._current_path, '[store2] /path2.vmdk')
 
     def test_rhv_disk_uuid(self):
         state = wrapper.State().instance

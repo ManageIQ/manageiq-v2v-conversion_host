@@ -1,10 +1,10 @@
 package controller
 
 import (
-	gc "github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/controller/garbage_collector"
-	"github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/controller/gcovirtprovider"
-	"github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/controller/ovirtprovider"
-	"github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/controller/v2vvmware"
+	gc "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/controller/garbage_collector"
+	"github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/controller/gcovirtprovider"
+	"github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/controller/ovirtprovider"
+	"github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/controller/v2vvmware"
 )
 
 func init() {

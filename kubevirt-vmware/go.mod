@@ -1,4 +1,4 @@
-module github.com/ovirt/v2v-conversion-host/kubevirt-vmware
+module github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware
 
 go 1.13
 

@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	ovirtsdk "github.com/ovirt/go-ovirt"
-	kubevirtv1alpha1 "github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
-	v2vv1alpha1 "github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
+	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
+	v2vv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
 )
 
 // Client struct holding implementation details required to interact with oVirt engine

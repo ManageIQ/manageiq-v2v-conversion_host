@@ -83,8 +83,8 @@ class TestOutputParser(unittest.TestCase):
                     br"openstack '--os-username=admin' '--os-identity-api-version=3' '--os-user-domain-name=Default' '--os-auth-url=http://10.19.2.25:5000//v3' '--os-volume-api-version=3' '--os-project-domain-name=Default' '--os-project-name=admin' '--os-password=100Root-' 'volume' 'show' '-f' 'json' '77c51545-f2a4-4bbf-8f04-169a15c23354'",  # NOQA
                     br"openstack '--os-username=admin' '--os-identity-api-version=3' '--os-user-domain-name=Default' '--os-auth-url=http://10.19.2.25:5000//v3' '--os-volume-api-version=3' '--os-project-domain-name=Default' '--os-project-name=admin' '--os-password=100Root-' 'volume' 'show' '-f' 'json' 'd85b7a6f-bffa-4b77-93df-912afd6e7014'",  # NOQA
                     ]
-            for l in lines:
-                parser.parse_line(l)
+            for line in lines:
+                parser.parse_line(line)
             self.assertIn(1, STATE.internal['disk_ids'])
             self.assertIn(2, STATE.internal['disk_ids'])
             self.assertEqual(

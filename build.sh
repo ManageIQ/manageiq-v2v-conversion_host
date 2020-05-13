@@ -110,7 +110,7 @@ do_build_vmware() {
         echo "Remove it and try again" >&2
         exit 1
     fi
-    IPATH="$GOPATH/src/github.com/ovirt/v2v-conversion-host/"
+    IPATH="$GOPATH/src/github.com/ManageIQ/manageiq-v2v-conversion_host/"
     mkdir -p "$IPATH"
     pushd $IPATH > /dev/null
     ln -s $(dirs -l +2)/kubevirt-vmware

@@ -7,8 +7,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	kubevirtv1alpha1 "github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
-	"github.com/ovirt/v2v-conversion-host/kubevirt-vmware/pkg/controller/utils"
+	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
+	"github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/controller/utils"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"

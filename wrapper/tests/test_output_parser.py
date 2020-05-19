@@ -76,7 +76,7 @@ class TestOutputParser(unittest.TestCase):
         with wrapper.log_parser() as parser:
             parser.parse_line(
                 state,
-                b'nbdkit: debug: Opening file [store1] /path1.vmdk (ha-nfcssl://[store1] path1.vmdk@1.2.3.4:902)')  # NOQA
+                b'nbdkit: vddk[1]: debug: Opening file [store1] /path1.vmdk (ha-nfcssl://[store1] path1.vmdk@1.2.3.4:902)')  # NOQA
             self.assertEqual(parser._current_path, '[store1] /path1.vmdk')
 
     def test_rhv_disk_uuid(self):

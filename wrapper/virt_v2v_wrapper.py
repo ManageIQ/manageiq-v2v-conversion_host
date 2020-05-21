@@ -407,6 +407,7 @@ def main():
     throttling_file = os.path.join(STATE_DIR,
                                    'v2v-import-%s.throttle' % log_tag)
     state['internal']['throttling_file'] = throttling_file
+    state.write()
 
     log_format = '%(asctime)s:%(levelname)s:' \
         + ' %(message)s (%(module)s:%(lineno)d)'

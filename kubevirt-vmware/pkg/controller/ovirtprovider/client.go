@@ -114,15 +114,16 @@ func (c *Client) GetVM(vm *v2vv1alpha1.OVirtVM) (*kubevirtv1alpha1.OVirtVMDetail
 }
 
 type vm struct {
-	Boot   []string        `json:"boot"`
-	CPU    cpu             `json:"cpu"`
-	Disks  []disk          `json:"disks"`
-	ID     string          `json:"id"`
-	Memory int64           `json:"memory"`
-	Name   string          `json:"name"`
-	Nics   []nic           `json:"nics"`
-	OS     operatingSystem `json:"os"`
-	VMType string          `json:"vmtype"`
+	Boot        []string        `json:"boot"`
+	CPU         cpu             `json:"cpu"`
+	Description string          `json:"description"`
+	Disks       []disk          `json:"disks"`
+	ID          string          `json:"id"`
+	Memory      int64           `json:"memory"`
+	Name        string          `json:"name"`
+	Nics        []nic           `json:"nics"`
+	OS          operatingSystem `json:"os"`
+	VMType      string          `json:"vmtype"`
 }
 
 type cpu struct {
@@ -161,6 +162,9 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 	vm := &vm{}
 	if vmName, ok := sourceVM.Name(); ok {
 		vm.Name = vmName
+	}
+	if desc, ok := sourceVM.Description(); ok {
+		vm.Description = desc
 	}
 	if vmID, ok := sourceVM.Id(); ok {
 		vm.ID = vmID

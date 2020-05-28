@@ -122,6 +122,7 @@ type vm struct {
 	Memory      int64           `json:"memory"`
 	Name        string          `json:"name"`
 	Nics        []nic           `json:"nics"`
+	Status      string          `json:"status"`
 	OS          operatingSystem `json:"os"`
 	VMType      string          `json:"vmtype"`
 }
@@ -165,6 +166,9 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 	}
 	if desc, ok := sourceVM.Description(); ok {
 		vm.Description = desc
+	}
+	if status, ok := sourceVM.Status(); ok {
+		vm.Status = string(status)
 	}
 	if vmID, ok := sourceVM.Id(); ok {
 		vm.ID = vmID

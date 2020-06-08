@@ -2,7 +2,7 @@
 
 KUBEVIRT_VERSION="2.0.0"
 KUBEVIRT_CONVERSION_RELEASE="3"
-KUBEVIRT_VMWARE_RELEASE="3"
+KUBEVIRT_VMWARE_RELEASE="4"
 
 QUAY_NS=quay.io/kubevirt
 
@@ -99,7 +99,7 @@ do_build_conversion() {
 }
 
 do_build_vmware() {
-    TAG="v$KUBEVIRT_VERSION-$KUBEVIRT_CONVERSION_RELEASE"
+    TAG="v$KUBEVIRT_VERSION-$KUBEVIRT_VMWARE_RELEASE"
     IMAGE="$QUAY_NS/kubevirt-vmware"
 
     # Prepare golang environment

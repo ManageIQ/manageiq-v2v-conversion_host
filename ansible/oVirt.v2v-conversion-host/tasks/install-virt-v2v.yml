@@ -1,5 +1,5 @@
 ---
-- name: Ensure nbdkit packages are installed
+- name: Ensure nbdkit packages are installed (EL7)
   yum:
     name:
       - nbdkit
@@ -7,3 +7,14 @@
       - virt-v2v
       - v2v-conversion-host-wrapper
     state: "{{ v2v_yum_check }}"
+  when: ansible_distribution_major_version == "7"
+
+- name: Ensure nbdkit packages are installed (EL8)
+  yum:
+    name:
+      - nbdkit
+      - nbdkit-python-plugin
+      - virt-v2v
+      - v2v-conversion-host-wrapper
+    state: "{{ v2v_yum_check }}"
+  when: ansible_distribution_major_version == "8"

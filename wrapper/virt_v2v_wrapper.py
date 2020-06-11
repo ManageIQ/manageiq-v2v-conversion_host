@@ -140,7 +140,7 @@ def prepare_command(data, v2v_caps, agent_sock=None):
     v2v_env['LANG'] = 'C'
     if 'backend' in data:
         if data['backend'] == 'direct':
-            logging.debug('Using direct backend. Hack, hack...')
+            logging.debug('Using direct backend.')
         v2v_env['LIBGUESTFS_BACKEND'] = data['backend']
     if 'virtio_win' in data:
         v2v_env['VIRTIO_WIN'] = data['virtio_win']

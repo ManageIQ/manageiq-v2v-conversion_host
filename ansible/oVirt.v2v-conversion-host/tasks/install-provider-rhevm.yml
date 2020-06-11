@@ -1,5 +1,12 @@
 ---
-- name: Install oVirt SDK
+- name: Install oVirt SDK (EL7)
   yum:
     name: python-ovirt-engine-sdk4
     state: "{{ v2v_yum_check }}"
+  when: ansible_distribution_major_version == "7"
+
+- name: Install oVirt SDK (EL8)
+  yum:
+    name: python3-ovirt-engine-sdk4
+    state: "{{ v2v_yum_check }}"
+  when: ansible_distribution_major_version == "8"

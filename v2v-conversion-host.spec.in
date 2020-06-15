@@ -105,6 +105,18 @@ if [ $1 -eq 1 -a -f /usr/bin/virt-v2v-wrapper.py ] ; then
 fi
 
 %changelog
+* Mon Jun 15 2020 Tomáš Golembiovský <tgolembi@redhat.com> 1.16.1-1
+- Ansible changes:
+  * Update the deployment to work on EL8
+- Wrapper changes:
+  * Update regexp for nbdkit disk path
+  * Fix treatment of rhv-verifypeer in a compatible way
+  * Clean failed systemd units at exit (RHBZ#1749347)
+  * Duplicate logs to stdout only for Kubevirt
+  * Fix LUKS key file opening
+  * Fix state file permissions and writing on start
+  * Various tiny fixes
+
 * Mon Nov 25 2019 Tomáš Golembiovský <tgolembi@redhat.com> 1.16.0-1
 - Ansible changes:
   * bump requirement to Ansible 2.8

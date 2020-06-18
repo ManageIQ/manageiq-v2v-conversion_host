@@ -46,7 +46,8 @@ do_dist() {
    -e "s|@PACKAGE_NAME@|$PACKAGE_NAME|g" \
    < "$PACKAGE_NAME.spec.in" > "$PACKAGE_NAME.spec"
 
-  git ls-files | tar --files-from /proc/self/fd/0 -czf "$TARBALL" "$PACKAGE_NAME.spec"
+  git ls-files | grep -v '^kubevirt-conversion\|^kubevirt-vmware' | \
+      tar --files-from /proc/self/fd/0 -czf "$TARBALL" "$PACKAGE_NAME.spec"
   echo "tar archive '$TARBALL' created."
 }
 

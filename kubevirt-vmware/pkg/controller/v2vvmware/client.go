@@ -8,24 +8,26 @@ package v2vvmware
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
-	"github.com/vmware/govmomi/object"
-	"net/http"
-	"net/url"
 )
 
 type Client struct {
 	Client *govmomi.Client
-	ctx context.Context
+	ctx    context.Context
 }
 
 type LoginCredentials struct {
-	host string
+	host     string
 	username string
 	password string
 }
@@ -86,14 +88,45 @@ func (c *Client) GetVM(name string) (mo.VirtualMachine, string, error) {
 		return vm, hostPath, err
 	}
 
-	f := find.NewFinder(client.Client, true)
-	host, err := f.ObjectReference(c.ctx, *vm.Summary.Runtime.Host)
+	hostPath, err = c.hostPath(vm)
 	if err != nil {
 		return vm, hostPath, err
 	}
-	hostPath = host.(*object.HostSystem).Common.InventoryPath
 
 	return vm, hostPath, nil
+}
+
+func (c *Client) hostPath(vm mo.VirtualMachine) (string, error) {
+	client := c.Client
+	m := view.NewManager(client.Client)
+
+	f := find.NewFinder(client.Client, true)
+	host, err := f.ObjectReference(c.ctx, *vm.Summary.Runtime.Host)
+	if err != nil {
+		return "", err
+	}
+	var hss mo.HostSystem
+	v, err := m.CreateContainerView(c.ctx, client.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+	defer v.Destroy(c.ctx)
+	if err != nil {
+		return "", err
+	}
+	err = v.RetrieveWithFilter(c.ctx, []string{"HostSystem"}, []string{"summary", "name", "parent"}, &hss, property.Filter{"summary.config.name": host.(*object.HostSystem).Name()})
+	if err != nil {
+		return "", err
+	}
+	pc := property.DefaultCollector(client.Client)
+	var cluster mo.ManagedEntity
+	err = pc.RetrieveOne(c.ctx, *hss.Parent, []string{"name"}, &cluster)
+	if err != nil {
+		return "", err
+	}
+	path := host.(*object.HostSystem).InventoryPath
+	if cluster.Name == hss.Name {
+		path = strings.TrimSuffix(path, "/"+hss.Name)
+	}
+
+	return path, nil
 }
 
 func (c *Client) Logout() error {
@@ -121,7 +154,7 @@ func NewClient(ctx context.Context, credentials *LoginCredentials) (*Client, err
 
 	c := &Client{
 		Client: client,
-		ctx: ctx,
+		ctx:    ctx,
 	}
 	return c, nil
 }

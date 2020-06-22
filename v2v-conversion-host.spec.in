@@ -105,6 +105,10 @@ if [ $1 -eq 1 -a -f /usr/bin/virt-v2v-wrapper.py ] ; then
 fi
 
 %changelog
+* Mon Jun 22 2020 Tomáš Golembiovský <tgolembi@redhat.com> 1.16.2-1
+- remove check for oVirt version
+- don't check if nbdkit plugin works properly in ansible playbook (RHBZ#1847898)
+
 * Mon Jun 15 2020 Tomáš Golembiovský <tgolembi@redhat.com> 1.16.1-1
 - Ansible changes:
   * Update the deployment to work on EL8

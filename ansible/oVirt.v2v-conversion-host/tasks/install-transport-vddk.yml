@@ -29,8 +29,7 @@
 
   when:
     - not v2v_vddk_library_installed or
-      not v2v_nbdkit_plugin_installed or
-      not v2v_nbdkit_plugin_working
+      not v2v_nbdkit_plugin_installed
 
 - name: Make sure VDDK plugin is installed
   yum:

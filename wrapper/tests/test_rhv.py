@@ -16,58 +16,58 @@ class TestRHV(unittest.TestCase):
     def test_tools_iso_ordering(self):
         host = hosts.VDSMHost()
         self.assertEqual(
-                b'virtio-win-123.iso',
-                host._filter_iso_names(b'/', [
-                    b'a.iso',
-                    b'virtio-win-123.iso',
-                    b'b.iso',
+                'virtio-win-123.iso',
+                host._filter_iso_names('/', [
+                    'a.iso',
+                    'virtio-win-123.iso',
+                    'b.iso',
                     ]))
         # Priority
         self.assertEqual(
-                b'RHEV-toolsSetup_123.iso',
-                host._filter_iso_names(b'/', [
-                    b'RHEV-toolsSetup_123.iso',
-                    b'virtio-win-123.iso',
+                'RHEV-toolsSetup_123.iso',
+                host._filter_iso_names('/', [
+                    'RHEV-toolsSetup_123.iso',
+                    'virtio-win-123.iso',
                     ]))
         self.assertEqual(
-                b'RHEV-toolsSetup_123.iso',
-                host._filter_iso_names(b'/', [
-                    b'virtio-win-123.iso',
-                    b'RHEV-toolsSetup_123.iso',
+                'RHEV-toolsSetup_123.iso',
+                host._filter_iso_names('/', [
+                    'virtio-win-123.iso',
+                    'RHEV-toolsSetup_123.iso',
                     ]))
         self.assertEqual(
-                b'RHEV-toolsSetup_234.iso',
-                host._filter_iso_names(b'/', [
-                    b'RHEV-toolsSetup_123.iso',
-                    b'virtio-win-123.iso',
-                    b'RHEV-toolsSetup_234.iso',
+                'RHEV-toolsSetup_234.iso',
+                host._filter_iso_names('/', [
+                    'RHEV-toolsSetup_123.iso',
+                    'virtio-win-123.iso',
+                    'RHEV-toolsSetup_234.iso',
                     ]))
         self.assertEqual(
-                b'RHEV-toolsSetup_234.iso',
-                host._filter_iso_names(b'/', [
-                    b'RHEV-toolsSetup_234.iso',
-                    b'virtio-win-123.iso',
-                    b'RHEV-toolsSetup_123.iso',
+                'RHEV-toolsSetup_234.iso',
+                host._filter_iso_names('/', [
+                    'RHEV-toolsSetup_234.iso',
+                    'virtio-win-123.iso',
+                    'RHEV-toolsSetup_123.iso',
                     ]))
         self.assertEqual(
-                b'rhv-tools-setup.iso',
-                host._filter_iso_names(b'/', [
-                    b'rhv-tools-setup.iso',
-                    b'virtio-win-123.iso',
+                'rhv-tools-setup.iso',
+                host._filter_iso_names('/', [
+                    'rhv-tools-setup.iso',
+                    'virtio-win-123.iso',
                     ]))
         # Version
         self.assertEqual(
-                b'RHEV-toolsSetup_4.0_3.iso',
-                host._filter_iso_names(b'/', [
-                    b'RHEV-toolsSetup_4.0_3.iso',
-                    b'RHEV-toolsSetup_4.0_2.iso',
+                'RHEV-toolsSetup_4.0_3.iso',
+                host._filter_iso_names('/', [
+                    'RHEV-toolsSetup_4.0_3.iso',
+                    'RHEV-toolsSetup_4.0_2.iso',
                     ]))
 
         self.assertEqual(
-                b'RHEV-toolsSetup_4.1_3.iso',
-                host._filter_iso_names(b'/', [
-                    b'RHEV-toolsSetup_4.0_3.iso',
-                    b'RHEV-toolsSetup_4.1_3.iso',
+                'RHEV-toolsSetup_4.1_3.iso',
+                host._filter_iso_names('/', [
+                    'RHEV-toolsSetup_4.0_3.iso',
+                    'RHEV-toolsSetup_4.1_3.iso',
                     ]))
 
     VDDK_RHV = {

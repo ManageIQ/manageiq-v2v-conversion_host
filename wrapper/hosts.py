@@ -603,14 +603,14 @@ class VDSMHost(BaseHost):
     TYPE = BaseHost.TYPE_VDSM
 
     TOOLS_PATTERNS = [
-        (7, br'RHV-toolsSetup_([0-9._]+)\.iso'),
-        (6, br'rhv-tools-setup\.iso'),
-        (5, br'RHEV-toolsSetup_([0-9._]+)\.iso'),
-        (4, br'rhev-tools-setup\.iso'),
-        (3, br'oVirt-toolsSetup_([a-z0-9._-]+)\.iso'),
-        (2, br'ovirt-tools-setup\.iso'),
-        (1, br'virtio-win-([0-9.]+).iso'),
-        (0, br'virtio-win\.iso'),
+        (7, r'RHV-toolsSetup_([0-9._]+)\.iso'),
+        (6, r'rhv-tools-setup\.iso'),
+        (5, r'RHEV-toolsSetup_([0-9._]+)\.iso'),
+        (4, r'rhev-tools-setup\.iso'),
+        (3, r'oVirt-toolsSetup_([a-z0-9._-]+)\.iso'),
+        (2, r'ovirt-tools-setup\.iso'),
+        (1, r'virtio-win-([0-9.]+).iso'),
+        (0, r'virtio-win\.iso'),
         ]
     VDSM_LOG_DIR = '/var/log/vdsm/import'
     VDSM_MOUNTS = '/rhev/data-center/mnt'
@@ -891,7 +891,7 @@ class VDSMHost(BaseHost):
                 if not m:
                     continue
                 if len(m.groups()) == 0:
-                    version = b''
+                    version = ''
                 else:
                     version = m.group(1)
                 logging.debug('Matched ISO %r (priority %d)', fname, priority)

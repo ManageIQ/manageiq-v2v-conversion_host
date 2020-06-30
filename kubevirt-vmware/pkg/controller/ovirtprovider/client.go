@@ -285,25 +285,27 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 		if nicInterface, ok := vmNic.Interface(); ok {
 			nic.Interface = string(nicInterface)
 		}
-		profileLink, _ := vmNic.VnicProfile()
-		profile, err := c.conn.FollowLink(profileLink)
-		if err != nil {
-			return "", err
-		}
-		vnic := profile.(*ovirtsdk.VnicProfile)
-		if vnicID, ok := vnic.Id(); ok {
-			nic.VnicID = vnicID
-		}
-		networkLink, _ := vnic.Network()
-		network, err := c.conn.FollowLink(networkLink)
-		if err != nil {
-			return "", err
-		}
-		net := network.(*ovirtsdk.Network)
-		if name, ok := net.Name(); ok {
-			nic.NetName = name
-			if vnicName, ok := vnic.Name(); ok {
-				nic.VnicNetName = name + "/" + vnicName
+		if profileLink, ok := vmNic.VnicProfile(); ok {
+			profile, err := c.conn.FollowLink(profileLink)
+			if err != nil {
+				return "", err
+			}
+			vnic := profile.(*ovirtsdk.VnicProfile)
+			if vnicID, ok := vnic.Id(); ok {
+				nic.VnicID = vnicID
+			}
+			if networkLink, ok := vnic.Network(); ok {
+				network, err := c.conn.FollowLink(networkLink)
+				if err != nil {
+					return "", err
+				}
+				net := network.(*ovirtsdk.Network)
+				if name, ok := net.Name(); ok {
+					nic.NetName = name
+					if vnicName, ok := vnic.Name(); ok {
+						nic.VnicNetName = name + "/" + vnicName
+					}
+				}
 			}
 		}
 		vm.Nics = append(vm.Nics, *nic)

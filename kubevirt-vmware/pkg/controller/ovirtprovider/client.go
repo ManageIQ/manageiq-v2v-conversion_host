@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
-	ovirtsdk "github.com/ovirt/go-ovirt"
 	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
 	v2vv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
+	ovirtsdk "github.com/ovirt/go-ovirt"
 )
 
 // Client struct holding implementation details required to interact with oVirt engine
@@ -24,6 +25,11 @@ type VM struct {
 
 // NewClient creates new client struct based on connection details provided
 func NewClient(ctx context.Context, url string, username string, password string, ca string) (*Client, error) {
+	if !strings.HasPrefix(url, "https://") {
+		// default to secure https
+		url = "https://" + url
+	}
+
 	conn, err := ovirtsdk.NewConnectionBuilder().
 		URL(url).
 		Username(username).

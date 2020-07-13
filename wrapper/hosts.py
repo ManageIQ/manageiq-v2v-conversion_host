@@ -189,13 +189,13 @@ class CNVHost(BaseHost):
             })
             pod['metadata']['annotations'] = {}
             logging.debug('Creating /metadata/annotations in POD description')
-            patch.append({
-                "op": "add",
-                "path": "/metadata/annotations/v2vConversionProgress",
-                "value": str(progress)
-            })
-            logging.debug('Updating progress in POD annotation')
-            self._k8s.patch(json.dumps(patch))
+        patch.append({
+            "op": "add",
+            "path": "/metadata/annotations/v2vConversionProgress",
+            "value": str(progress)
+        })
+        logging.debug('Updating progress in POD annotation')
+        self._k8s.patch(json.dumps(patch))
 
     def validate_data(self, data):
         """ Validate input data, fill in defaults, etc """
@@ -246,7 +246,7 @@ class K8SCommunicator(object):
         logging.debug('HTTP response code %d', ret)
         if ret >= 300:
             logging.debug('response output: %s', response.getvalue())
-            c.close()
+        c.close()
         return response.getvalue()
 
     def patch(self, body):
@@ -268,7 +268,7 @@ class K8SCommunicator(object):
         logging.debug('HTTP response code %d', ret)
         if ret >= 300:
             logging.debug('response output: %s', response.getvalue())
-            c.close()
+        c.close()
 
 
 class OSPHost(BaseHost):

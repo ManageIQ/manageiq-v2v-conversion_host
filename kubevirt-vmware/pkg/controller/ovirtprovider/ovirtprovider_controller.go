@@ -26,8 +26,9 @@ import (
 const ovirtSecretKey = "ovirt"
 
 var (
-	log        = logf.Log.WithName("controller_ovirtprovider")
-	timeToWait = time.Duration(5 * time.Minute)
+	log           = logf.Log.WithName("controller_ovirtprovider")
+	timeToWait    = time.Duration(1 * time.Minute)
+	timeToRequeue = time.Duration(10 * time.Second)
 )
 
 // Add creates a new OVirtProvider Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -155,7 +156,7 @@ func (r *ReconcileOVirtProvider) checkTime(instance *v2vv1alpha1.OVirtProvider, 
 		return reconcile.Result{}, nil
 	}
 	// wait for user to update the secret
-	return reconcile.Result{}, err
+	return reconcile.Result{RequeueAfter: timeToRequeue}, err
 }
 
 func (r *ReconcileOVirtProvider) fetchSecret(provider *v2vv1alpha1.OVirtProvider) (*corev1.Secret, error) {

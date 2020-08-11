@@ -163,6 +163,7 @@ type nic struct {
 	NetName     string `json:"netname"`
 	VnicID      string `json:"vnicid"`
 	VnicNetName string `json:"vnicnetname"`
+	Sriov       bool   `json:"sriov"`
 }
 
 func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
@@ -307,9 +308,20 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 					}
 				}
 			}
+			nic.Sriov = isSRIOV(vnic)
 		}
 		vm.Nics = append(vm.Nics, *nic)
 	}
 	raw, err := json.Marshal(vm)
 	return string(raw), err
+}
+
+func isSRIOV(vNicProfile *ovirtsdk.VnicProfile) bool {
+	if pt, ok := vNicProfile.PassThrough(); ok {
+		if ptm, ok := pt.Mode(); ok && ptm == ovirtsdk.VNICPASSTHROUGHMODE_ENABLED {
+			return true
+		}
+	}
+
+	return false
 }

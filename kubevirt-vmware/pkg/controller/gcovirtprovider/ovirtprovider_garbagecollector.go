@@ -22,6 +22,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
+const (
+	temporaryLabel            = "cnv.io/temporary"
+	defaultTimeToLiveDuration = time.Hour * 1
+)
+
 var doneResult = reconcile.Result{} // no requeue
 var rescheduleResult = reconcile.Result{RequeueAfter: time.Minute * 5}
 
@@ -139,6 +144,15 @@ func (r *ReconcileOVirtProvider) prune(reqLogger logr.Logger, namespace string) 
 					reqLogger.Error(err, fmt.Sprintf("Failed to remove provider object '%s' after time out, will be scheduled for next round.", obj.Name))
 				}
 			}
+		} else if obj.Labels[temporaryLabel] == "true" {
+			result = rescheduleResult
+			reqLogger.Info(fmt.Sprintf("Object with '%s' label found, name = '%s'. TimeToLive will be set.", temporaryLabel, obj.Name))
+			deletionTimeStamp := obj.CreationTimestamp.Time.Add(defaultTimeToLiveDuration)
+			err := r.updateDeletionTimestamp(types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, deletionTimeStamp, utils.MaxRetryCount)
+			if err != nil {
+				// ignore and continue with remaining objects
+				reqLogger.Error(err, fmt.Sprintf("Permanently failed to update timeToLive of '%s' provider", obj.Name))
+			}
 		}
 	}
 
@@ -173,6 +187,15 @@ func (r *ReconcileOVirtProvider) pruneSecrets(reqLogger logr.Logger, namespace s
 				if err != nil {
 					reqLogger.Error(err, fmt.Sprintf("Failed to remove Secret object '%s' after time out, will be scheduled for next round.", obj.Name))
 				}
+			}
+		} else if obj.Labels[temporaryLabel] == "true" {
+			result = rescheduleResult
+			reqLogger.Info(fmt.Sprintf("Secret with '%s' label found, name = '%s'. TimeToLive will be set.", temporaryLabel, obj.Name))
+			deletionTimeStamp := obj.CreationTimestamp.Time.Add(defaultTimeToLiveDuration)
+			err := r.updateSecretDeletionTimestamp(types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, deletionTimeStamp, utils.MaxRetryCount)
+			if err != nil {
+				// ignore and continue with remaining objects
+				reqLogger.Error(err, fmt.Sprintf("Permanently failed to update timeToLive of '%s' Secret", obj.Name))
 			}
 		}
 	}

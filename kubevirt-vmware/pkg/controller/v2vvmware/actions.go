@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -30,7 +31,7 @@ func getLoginCredentials(connectionSecret *corev1.Secret) (*LoginCredentials) {
 	credentials := &LoginCredentials{
 		username: string(data["username"]),
 		password: string(data["password"]),
-		host: string(data["url"]),
+		host: strings.TrimSpace(string(data["url"])),
 	}
 
 	log.Info(fmt.Sprintf("VMWare credentials retrieved from a Secret, username: '%s', url: '%s'", credentials.username, credentials.host))

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
@@ -138,6 +139,10 @@ func NewClient(ctx context.Context, credentials *LoginCredentials) (*Client, err
 	insecure := true // TODO
 
 	log.Info(fmt.Sprintf("NewClient, user: '%s', host: '%s'", credentials.username, credentials.host))
+
+	if strings.IndexFunc(credentials.host, unicode.IsSpace) >= 0 {
+		return nil, fmt.Errorf("host contains invalid white space characters: %v", credentials.host)
+	}
 
 	u := &url.URL{
 		Scheme: "https",

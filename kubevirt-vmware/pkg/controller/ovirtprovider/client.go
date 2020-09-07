@@ -9,6 +9,7 @@ import (
 	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
 	v2vv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
 	ovirtsdk "github.com/ovirt/go-ovirt"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // Client struct holding implementation details required to interact with oVirt engine
@@ -150,6 +151,7 @@ type disk struct {
 	ID                string `json:"id"`
 	Interface         string `json:"interface"`
 	Name              string `json:"name"`
+	Mode              string `json:"mode"`
 	Size              int64  `json:"size"`
 	StorageDomainName string `json:"sdname"`
 	StorageDomainID   string `json:"sdid"`
@@ -263,6 +265,8 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 		if sdID, ok := sd.(*ovirtsdk.StorageDomain).Id(); ok {
 			disk.StorageDomainID = sdID
 		}
+		disk.Mode = getMode(diskAttachment, sourceVM)
+
 		vm.Disks = append(vm.Disks, *disk)
 	}
 	nicsLink, _ := sourceVM.Nics()
@@ -314,6 +318,20 @@ func (c *Client) getRaw(sourceVM *ovirtsdk.Vm) (string, error) {
 	}
 	raw, err := json.Marshal(vm)
 	return string(raw), err
+}
+
+func getMode(diskAttachment *ovirtsdk.DiskAttachment, vm *ovirtsdk.Vm) string {
+	accessMode := corev1.ReadWriteOnce
+	if readOnly, ok := diskAttachment.ReadOnly(); ok && readOnly {
+		accessMode = corev1.ReadOnlyMany
+	}
+	if pp, ok := vm.PlacementPolicy(); ok {
+		if affinity, _ := pp.Affinity(); affinity == ovirtsdk.VMAFFINITY_MIGRATABLE {
+			accessMode = corev1.ReadWriteMany
+		}
+	}
+
+	return string(accessMode)
 }
 
 func isSRIOV(vNicProfile *ovirtsdk.VnicProfile) bool {

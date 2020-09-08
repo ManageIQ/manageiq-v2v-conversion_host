@@ -258,10 +258,10 @@ class _VMWare(object):
                               vm.snapshot.currentSnapshot)
                 self._snapshots.append(vm.snapshot.currentSnapshot)
                 return
-            except self.pyvmomi.vim.fault.VimFault:
+            except self.pyvmomi.vim.fault.VimFault as e:
                 if endt < time.time():
                     error('Could not create a snapshot', exception=True)
-                    raise RuntimeError('Could not create a snapshot')
+                    raise RuntimeError('Could not create a snapshot') from e
                 logging.warning('Could not create a snapshot, will retry')
                 time.sleep(5)
 
@@ -635,9 +635,9 @@ class PreCopy(StateObject):
             return None
         try:
             import nbd
-        except ImportError:
+        except ImportError as e:
             raise RuntimeError('libnbd is not available, it is required for '
-                               'two-phase conversion')
+                               'two-phase conversion') from e
 
         nbd_version = version.parse(nbd.NBD().get_version())
         if nbd_version < NBD_MIN_VERSION:
@@ -648,9 +648,9 @@ class PreCopy(StateObject):
         try:
             from . import pyvmomi_wrapper
             dir(pyvmomi_wrapper)
-        except ImportError:
+        except ImportError as e:
             raise RuntimeError('pyvmomi is not available, it is required for '
-                               'two-phase conversion')
+                               'two-phase conversion') from e
 
         return super(PreCopy, cls).__new__(cls)
 

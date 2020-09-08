@@ -136,9 +136,9 @@ class OpenStackSourceHost(_BaseSourceHost):
     def __init__(self, data, agent_sock):
         try:
             import openstack
-        except ImportError:
+        except ImportError as e:
             raise RuntimeError('OpenStack SDK is not installed on this '
-                               'conversion host!')
+                               'conversion host!') from e
 
         # Create a connection to the source cloud
         osp_env = data['osp_source_environment']
@@ -557,9 +557,10 @@ class OpenStackSourceHost(_BaseSourceHost):
             _, _, external_port = line.rpartition(':')
             try:
                 port = int(internal_port)
-            except ValueError:
+            except ValueError as e:
                 raise RuntimeError('Could not get port number from podman on '
-                                   'source conversion host! Line was '+line)
+                                   'source conversion host! Line was ' +
+                                   line) from e
             path = reverse_port_map[port]
             # The internal_port in the source conversion container is forwarded
             # to external_port on the source conversion host, and then we need

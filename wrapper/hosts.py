@@ -106,7 +106,7 @@ class _BaseHost(object):
 class KubevirtHost(_BaseHost):
 
     def __init__(self):
-        super(KubevirtHost, self).__init__()
+        super().__init__()
         self._k8s = _K8SCommunicator()
         self._tag = '123'
         # This could be stored in the host and just requested instead of the
@@ -241,7 +241,7 @@ class _K8SCommunicator(object):
 class OpenstackHost(_BaseHost):
 
     def __init__(self):
-        super(OpenstackHost, self).__init__()
+        super().__init__()
 
         self._created_disks = []
         self._attached_disks = []
@@ -691,7 +691,7 @@ class OvirtHost(_BaseHost):
     CA_FILE = 'v2v-conversion-host-ca-bundle.pem'
 
     def __init__(self):
-        super(OvirtHost, self).__init__()
+        super().__init__()
         import ovirtsdk4 as sdk
         self.sdk = sdk
         # For now there are limited possibilities in how we can select

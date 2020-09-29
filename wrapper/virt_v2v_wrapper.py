@@ -271,6 +271,7 @@ def wrapper(host, data, v2v_caps, agent_sock=None):
                 'virt-v2v terminated with return code %d',
                 runner.return_code)
             state = parser.parse(state)
+            host.update_progress()
     except Exception:
         state['failed'] = True
         error('Error while monitoring virt-v2v', exception=True)

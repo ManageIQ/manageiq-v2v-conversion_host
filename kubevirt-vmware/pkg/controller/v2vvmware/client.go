@@ -144,11 +144,22 @@ func NewClient(ctx context.Context, credentials *LoginCredentials) (*Client, err
 		return nil, fmt.Errorf("host contains invalid white space characters: %v", credentials.host)
 	}
 
+	host, err := parseHost(credentials.host)
+
+	if err != nil {
+		return nil, err
+	}
+
 	u := &url.URL{
-		Scheme: "https",
+		Scheme: "https", // force TLS
 		User:   url.UserPassword(credentials.username, credentials.password),
-		Host:   credentials.host, // TODO: handle the case if credentials.host starts with protocol (https://)
+		Host:   host,
 		Path:   vim25.Path,
+	}
+
+	// still check the URL validity and fail early, so the client doesn't panic later when creating requests
+	if _, err := url.Parse(u.String()); err != nil {
+		return nil, err
 	}
 
 	// Connect and log in to ESX or vCenter
@@ -162,4 +173,32 @@ func NewClient(ctx context.Context, credentials *LoginCredentials) (*Client, err
 		ctx:    ctx,
 	}
 	return c, nil
+}
+
+func parseHost(rawURL string) (string, error) {
+	if strings.IndexFunc(rawURL, unicode.IsSpace) >= 0 {
+		return "", fmt.Errorf("host contains invalid white space characters: %v", rawURL)
+	}
+
+	u, err := url.Parse(rawURL)
+
+	if err != nil || u.Scheme == "" {
+		// try again with a scheme, to parse the url in the general form
+		u, err = url.Parse("https://" + rawURL)
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", fmt.Errorf("host does not have a supported scheme: %v", rawURL)
+	}
+
+	if u.Host != "" {
+		return u.Host, nil
+	}
+
+	// default to original if host not found
+	return rawURL, nil
 }

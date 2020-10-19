@@ -3,11 +3,10 @@
 v2v-conversion-host-*.tar.gz
 .tox/
 exported-artifacts/
-kubevirt-vmware/build/_output
+vm-import-provider/build/_output
 __pycache__/
 v2v-conversion-host.spec
 
-build/
 dist/
 venv/
 *.egg-info/

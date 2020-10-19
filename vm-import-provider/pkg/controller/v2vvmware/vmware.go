@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
+	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/vm-import-provider/pkg/apis/v2v/v1alpha1"
 )
 
 /*
@@ -46,8 +46,8 @@ func GetVM(c *Client, vmName string) (*kubevirtv1alpha1.VmwareVmDetail, error) {
 	}
 
 	raw, _ := json.Marshal(vm)
-	vmDetail := kubevirtv1alpha1.VmwareVmDetail {
-		Raw: string(raw), // TODO: pick what's needed
+	vmDetail := kubevirtv1alpha1.VmwareVmDetail{
+		Raw:      string(raw), // TODO: pick what's needed
 		HostPath: hostPath,
 	}
 	log.Info(fmt.Sprintf("Fetched VM: %s, host: %s, data: %s", vmName, hostPath, vmDetail.Raw))

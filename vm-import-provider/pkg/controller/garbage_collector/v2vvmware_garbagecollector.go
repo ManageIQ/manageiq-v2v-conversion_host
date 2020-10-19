@@ -7,8 +7,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
-	"github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/controller/utils"
+	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/vm-import-provider/pkg/apis/v2v/v1alpha1"
+	"github.com/ManageIQ/manageiq-v2v-conversion_host/vm-import-provider/pkg/controller/utils"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,7 +27,7 @@ const vCenterTemporaryLabel = "cnv.io/temporary"
 const DefaultTimeToLiveDuration = time.Hour * 1
 
 var doneResult = reconcile.Result{} // no requeue
-var rescheduleResult = reconcile.Result{RequeueAfter: time.Minute*5}
+var rescheduleResult = reconcile.Result{RequeueAfter: time.Minute * 5}
 
 var log = logf.Log.WithName("gc_v2vvmware")
 
@@ -73,7 +73,7 @@ func (r *ReconcileV2VVmware) updateDeletionTimestamp(namespacedName types.Namesp
 	if err != nil {
 		if counter > 0 {
 			utils.SleepBeforeRetry()
-			return r.updateDeletionTimestamp(namespacedName, valueTime, counter - 1)
+			return r.updateDeletionTimestamp(namespacedName, valueTime, counter-1)
 		}
 		return err
 	}
@@ -84,7 +84,7 @@ func (r *ReconcileV2VVmware) updateDeletionTimestamp(namespacedName types.Namesp
 		log.Error(err, fmt.Sprintf("Failed to update V2VVmware timeToLive. Intended to write: '%s'", value))
 		if counter > 0 {
 			utils.SleepBeforeRetry()
-			return r.updateDeletionTimestamp(namespacedName, valueTime, counter - 1)
+			return r.updateDeletionTimestamp(namespacedName, valueTime, counter-1)
 		}
 	}
 	return nil
@@ -97,7 +97,7 @@ func (r *ReconcileV2VVmware) updateSecretDeletionTimestamp(namespacedName types.
 	if err != nil {
 		if counter > 0 {
 			utils.SleepBeforeRetry()
-			return r.updateSecretDeletionTimestamp(namespacedName, valueTime, counter - 1)
+			return r.updateSecretDeletionTimestamp(namespacedName, valueTime, counter-1)
 		}
 		return err
 	}
@@ -108,14 +108,13 @@ func (r *ReconcileV2VVmware) updateSecretDeletionTimestamp(namespacedName types.
 		log.Error(err, fmt.Sprintf("Failed to update Secret timeToLive. Intended to write: '%s'", value))
 		if counter > 0 {
 			utils.SleepBeforeRetry()
-			return r.updateSecretDeletionTimestamp(namespacedName, valueTime, counter - 1)
+			return r.updateSecretDeletionTimestamp(namespacedName, valueTime, counter-1)
 		}
 	}
 	return nil
 }
 
-
-func (r *ReconcileV2VVmware) pruneV2VVMwares(reqLogger logr.Logger, namespace string ) reconcile.Result {
+func (r *ReconcileV2VVmware) pruneV2VVMwares(reqLogger logr.Logger, namespace string) reconcile.Result {
 	result := doneResult
 
 	opts := &client.ListOptions{
@@ -158,8 +157,7 @@ func (r *ReconcileV2VVmware) pruneV2VVMwares(reqLogger logr.Logger, namespace st
 	return result
 }
 
-
-func (r *ReconcileV2VVmware) pruneSecrets(reqLogger logr.Logger, namespace string ) reconcile.Result {
+func (r *ReconcileV2VVmware) pruneSecrets(reqLogger logr.Logger, namespace string) reconcile.Result {
 	result := doneResult
 
 	opts := &client.ListOptions{
@@ -202,7 +200,6 @@ func (r *ReconcileV2VVmware) pruneSecrets(reqLogger logr.Logger, namespace strin
 
 	return result
 }
-
 
 func (r *ReconcileV2VVmware) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)

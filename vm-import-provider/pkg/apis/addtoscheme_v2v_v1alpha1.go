@@ -1,7 +1,7 @@
 package apis
 
 import (
-	"github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
+	"github.com/ManageIQ/manageiq-v2v-conversion_host/vm-import-provider/pkg/apis/v2v/v1alpha1"
 )
 
 func init() {

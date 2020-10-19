@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
-	v2vv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware/pkg/apis/v2v/v1alpha1"
+	kubevirtv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/vm-import-provider/pkg/apis/v2v/v1alpha1"
+	v2vv1alpha1 "github.com/ManageIQ/manageiq-v2v-conversion_host/vm-import-provider/pkg/apis/v2v/v1alpha1"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	corev1 "k8s.io/api/core/v1"
 )

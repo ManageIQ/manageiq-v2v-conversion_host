@@ -6,4 +6,4 @@ rules:
 
 ignore: |
   .tox/
-  kubevirt-vmware/vendor/**
+  vm-import-provider/vendor/**

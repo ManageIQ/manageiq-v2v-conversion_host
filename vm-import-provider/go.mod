@@ -1,4 +1,4 @@
-module github.com/ManageIQ/manageiq-v2v-conversion_host/kubevirt-vmware
+module github.com/ManageIQ/manageiq-v2v-conversion_host/vm-import-provider
 
 go 1.13
 

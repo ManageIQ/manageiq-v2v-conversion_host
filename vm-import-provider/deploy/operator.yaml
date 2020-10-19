@@ -16,7 +16,7 @@ spec:
       serviceAccountName: v2v-vmware
       containers:
         - name: v2v-vmware
-          image: quay.io/kubevirt/kubevirt-vmware:v2.0.0
+          image: quay.io/kubevirt/vm-import-provider:v2.0.0
           command:
             - v2v-vmware
           imagePullPolicy: Always

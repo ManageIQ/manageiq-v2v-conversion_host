@@ -2,7 +2,7 @@
 
 KUBEVIRT_VERSION="2.0.0"
 KUBEVIRT_CONVERSION_RELEASE="3"
-KUBEVIRT_VMWARE_RELEASE="9"
+KUBEVIRT_VMIMPORT_PROVIDER="9"
 
 QUAY_NS=quay.io/kubevirt
 
@@ -98,12 +98,12 @@ do_build_conversion() {
     #${CONTAINER_MGMT} push quay.io/nyoxi/kubevirt-conversion:latest
 }
 
-do_build_vmware() {
-    TAG="v$KUBEVIRT_VERSION-$KUBEVIRT_VMWARE_RELEASE"
-    IMAGE="$QUAY_NS/kubevirt-vmware"
+do_build_provider() {
+    TAG="v$KUBEVIRT_VERSION-$KUBEVIRT_VMIMPORT_PROVIDER"
+    IMAGE="$QUAY_NS/vm-import-provider"
 
     # Prepare golang environment
-    pushd kubevirt-vmware > /dev/null
+    pushd vm-import-provider > /dev/null
     export GOPATH="$(pwd)/build/GOPATH"
     if [ -e "$GOPATH" ] ; then
         echo "GOPATH exists ($GOPATH)" >&2
@@ -113,21 +113,21 @@ do_build_vmware() {
     IPATH="$GOPATH/src/github.com/ManageIQ/manageiq-v2v-conversion_host/"
     mkdir -p "$IPATH"
     pushd $IPATH > /dev/null
-    ln -s $(dirs -l +2)/kubevirt-vmware
-    cd kubevirt-vmware
+    ln -s $(dirs -l +2)/vm-import-provider
+    cd vm-import-provider
 
     # Build operator
     operator-sdk build "$IMAGE:$TAG"
 
     # Drop out and clean
-    popd > /dev/null # $IPATH/kubevirt-vmware
-    popd > /dev/null # /kubevirt-vmware
+    popd > /dev/null # $IPATH/vm-import-provider
+    popd > /dev/null # /vm-import-provider
     rm -frv "$GOPATH"
 }
 
 do_images() {
     do_build_conversion
-    do_build_vmware
+    do_build_provider
 }
 
 do_$1

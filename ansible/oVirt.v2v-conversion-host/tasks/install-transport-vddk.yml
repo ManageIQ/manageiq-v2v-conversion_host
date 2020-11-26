@@ -36,9 +36,3 @@
     state: "{{ v2v_yum_check }}"
     name: nbdkit-plugin-vddk
   when: ansible_distribution_major_version == "7"
-
-- name: Make sure VDDK plugin is installed (EL8)
-  yum:
-    state: "{{ v2v_yum_check }}"
-    name: nbdkit-vddk-plugin
-  when: ansible_distribution_major_version == "8"

@@ -783,14 +783,21 @@ class VDSMHost(BaseHost):
                 '-o', 'rhv',
                 '-os', data['export_domain'],
                 ])
-        if 'XDG_RUNTIME_DIR' in v2v_env and self.get_uid() != 0:
-            # Drop XDG_RUNTIME_DIR from environment. Otherwise it would "leak"
-            # throuh our su/sudo call and would cause permissions error for
-            # virt-v2v.
-            #
-            # https://bugzilla.redhat.com/show_bug.cgi?id=967509
-            logging.info('Dropping XDG_RUNTIME_DIR from environment.')
-            del v2v_env['XDG_RUNTIME_DIR']
+        if self.get_uid() != 0:
+            if 'XDG_RUNTIME_DIR' in v2v_env:
+                # Drop XDG_RUNTIME_DIR from environment. Otherwise it would
+                # "leak" throuh our su/sudo call and would cause permissions
+                # error for virt-v2v.
+                #
+                # https://bugzilla.redhat.com/show_bug.cgi?id=967509
+                logging.info('Dropping XDG_RUNTIME_DIR from environment.')
+                del v2v_env['XDG_RUNTIME_DIR']
+            if 'HOME' in v2v_env:
+                logging.info('Dropping HOME from environment.')
+                del v2v_env['HOME']
+            if 'USER' in v2v_env:
+                logging.info('Dropping USER from environment.')
+                del v2v_env['USER']
 
         return v2v_args, v2v_env
 

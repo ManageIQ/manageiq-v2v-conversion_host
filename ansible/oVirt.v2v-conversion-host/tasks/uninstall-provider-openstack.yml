@@ -2,3 +2,4 @@
 - name: Delete cron job for log cleanup
   file:
     path: /etc/cron.daily/virt-v2v-logs
+    state: absent

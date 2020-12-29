@@ -378,7 +378,7 @@ class OSPHost(BaseHost):
                     return False
                 volume_state = volume_state.rstrip()
                 logging.info('Current volume state: %s.', volume_state)
-                if volume_state == 'available':
+                if volume_state in ['available', b'available']:
                     logging.info(
                         'Volume detached in %s second(s), trasferring.',
                         int(time.time() - start_at))

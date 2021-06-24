@@ -17,13 +17,15 @@ matrix:
 # before_install:
 #  - docker pull centos:7
 
-# Install python-pip
+# Install needed packages
 addons:
   apt:
     packages:
       - python-pip
       - libgnutls.dev  # required by pycurl
       - libvirt.dev
+      - rustc  # required by cryptography for openstacksdk
+      - cargo
 
 install:
   - pip install tox

@@ -6,6 +6,8 @@ python:
   - "3.8"
   - "3.9-dev"
 
+dist: bionic
+
 matrix:
   allow_failures:
     - python: "3.9-dev"
@@ -22,8 +24,8 @@ addons:
   apt:
     packages:
       - python-pip
-      - libgnutls.dev  # required by pycurl
-      - libvirt.dev
+      - libgnutls28-dev  # required by pycurl
+      - libvirt-dev
       - rustc  # required by cryptography for openstacksdk
       - cargo
 

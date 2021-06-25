@@ -895,7 +895,7 @@ class PreCopy(StateObject):
         return True
 
     def _wait_for_qemus(self, cb_progress=None, cb_done=None):
-        while any([d.proc_qemu is not None for d in self.disks]):
+        while any(d.proc_qemu is not None for d in self.disks):
             for disk in self.disks:
                 if disk.proc_qemu is None:
                     continue

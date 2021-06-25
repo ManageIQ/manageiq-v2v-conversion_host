@@ -6,6 +6,8 @@ python:
   - "3.8"
   - "3.9-dev"
 
+dist: bionic
+
 matrix:
   allow_failures:
     - python: "3.9-dev"
@@ -17,13 +19,15 @@ matrix:
 # before_install:
 #  - docker pull centos:7
 
-# Install python-pip
+# Install needed packages
 addons:
   apt:
     packages:
       - python-pip
-      - libgnutls.dev  # required by pycurl
-      - libvirt.dev
+      - libgnutls28-dev  # required by pycurl
+      - libvirt-dev
+      - rustc  # required by cryptography for openstacksdk
+      - cargo
 
 install:
   - pip install tox

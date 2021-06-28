@@ -181,7 +181,7 @@ func updateStatusPhaseRetry(r *ReconcileV2VVmware, request reconcile.Request, ph
 	}
 
 	instance.Status.Phase = phase
-	err = r.client.Update(context.TODO(), instance)
+	err = r.client.Status().Update(context.TODO(), instance)
 	if err != nil {
 		log.Error(err, fmt.Sprintf("Failed to update V2VVmware status. Intended to write phase: '%s'", phase))
 		if retryCount > 0 {
